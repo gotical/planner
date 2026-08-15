@@ -62,6 +62,14 @@ public class Store {
         String json = "";
     }
 
+    static class Wish {
+        long id = 0;
+        String title = "";
+        String url = "";
+        String price = "";
+        long created = 0;
+    }
+
     final Context ctx;
     final SQLiteDatabase db;
 
@@ -72,7 +80,7 @@ public class Store {
     }
 
     static class DB extends SQLiteOpenHelper {
-        DB(Context c) { super(c, "planner.db", null, 4); }
+        DB(Context c) { super(c, "planner.db", null, 5); }
         public void onCreate(SQLiteDatabase d) {
             d.execSQL("CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, notes TEXT, time TEXT, repeat TEXT, list_id INTEGER, due INTEGER, reminder INTEGER, created INTEGER, done_at INTEGER, has_time INTEGER, priority INTEGER, done INTEGER, parent INTEGER, sort INTEGER, pinned INTEGER DEFAULT 0, dismissed INTEGER DEFAULT 0, tags TEXT DEFAULT '', reminders TEXT DEFAULT '', deleted INTEGER DEFAULT 0, deleted_at INTEGER DEFAULT 0)");
             d.execSQL("CREATE TABLE lists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color INTEGER, sort INTEGER)");
@@ -81,6 +89,7 @@ public class Store {
             d.execSQL("CREATE TABLE habit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, habit_id INTEGER, date TEXT, done INTEGER)");
             d.execSQL("CREATE TABLE focus_log (id INTEGER PRIMARY KEY AUTOINCREMENT, minutes INTEGER, started INTEGER, task_id INTEGER)");
             d.execSQL("CREATE TABLE templates (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, json TEXT)");
+            d.execSQL("CREATE TABLE wishes (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, url TEXT, price TEXT, created INTEGER)");
         }
         public void onUpgrade(SQLiteDatabase d, int o, int n) {
             if (o < 3) {
@@ -95,6 +104,9 @@ public class Store {
                 try { d.execSQL("CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color INTEGER, sort INTEGER)"); } catch (Exception ignored) { }
                 try { d.execSQL("CREATE TABLE focus_log (id INTEGER PRIMARY KEY AUTOINCREMENT, minutes INTEGER, started INTEGER, task_id INTEGER)"); } catch (Exception ignored) { }
                 try { d.execSQL("CREATE TABLE templates (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, json TEXT)"); } catch (Exception ignored) { }
+            }
+            if (o < 5) {
+                try { d.execSQL("CREATE TABLE wishes (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, url TEXT, price TEXT, created INTEGER)"); } catch (Exception ignored) { }
             }
         }
     }
@@ -340,6 +352,37 @@ public class Store {
 
     void deleteTemplate(long id) {
         db.delete("templates", "id=?", new String[]{String.valueOf(id)});
+    }
+
+    // ---------- wishes ----------
+    ArrayList<Wish> loadWishes() {
+        ArrayList<Wish> l = new ArrayList<>();
+        Cursor c = db.rawQuery("SELECT * FROM wishes ORDER BY id DESC", null);
+        while (c.moveToNext()) {
+            Wish w = new Wish();
+            w.id = c.getLong(c.getColumnIndex("id"));
+            w.title = c.getString(c.getColumnIndex("title"));
+            w.url = c.getString(c.getColumnIndex("url"));
+            w.price = c.getString(c.getColumnIndex("price"));
+            w.created = c.getLong(c.getColumnIndex("created"));
+            l.add(w);
+        }
+        c.close();
+        return l;
+    }
+
+    void saveWish(Wish w) {
+        ContentValues v = new ContentValues();
+        v.put("title", w.title);
+        v.put("url", w.url);
+        v.put("price", w.price);
+        v.put("created", w.created == 0 ? System.currentTimeMillis() : w.created);
+        if (w.id == 0) w.id = db.insert("wishes", null, v);
+        else db.update("wishes", v, "id=?", new String[]{String.valueOf(w.id)});
+    }
+
+    void deleteWish(long id) {
+        db.delete("wishes", "id=?", new String[]{String.valueOf(id)});
     }
 
     // ---------- habits ----------

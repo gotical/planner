@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     ArrayList<Store.TList> lists = new ArrayList<>();
     ArrayList<Store.Habit> habits = new ArrayList<>();
     ArrayList<Store.Tag> tags = new ArrayList<>();
+    ArrayList<Store.Wish> wishes = new ArrayList<>();
 
     int tab = 0;
     String view = "today";
@@ -71,6 +72,7 @@ public class MainActivity extends Activity {
         lists = store.loadLists();
         habits = store.loadHabits();
         tags = store.loadTags();
+        wishes = store.loadWishes();
     }
 
     // ================= SHELL =================
@@ -189,6 +191,7 @@ public class MainActivity extends Activity {
         col.addView(drawerItem(R.drawable.ic_done_all, "Завершённые", "completed", null));
         col.addView(drawerItem(R.drawable.ic_block, "Пропущенные", "skipped", null));
         col.addView(drawerItem(R.drawable.ic_delete, "Корзина", "trash", null));
+        col.addView(drawerItem(R.drawable.ic_favorite, "Хочу", "wish", null));
 
         Ui.divider(col, this, dp(20));
 
@@ -319,6 +322,7 @@ public class MainActivity extends Activity {
     void tasksScreen() {
         content.removeAllViews();
         fabLayer.removeAllViews();
+        if ("wish".equals(view)) { wishScreen(); return; }
         LinearLayout col = Ui.col(this);
         col.addView(tasksHeader());
 
@@ -523,6 +527,7 @@ public class MainActivity extends Activity {
             case "completed": return "Завершённые";
             case "skipped": return "Пропущенные";
             case "trash": return "Корзина";
+            case "wish": return "Хочу";
             case "inbox": return "Входящие";
             default:
                 if (view.startsWith("list:")) {
@@ -684,11 +689,10 @@ public class MainActivity extends Activity {
     }
 
     void trashMenu(final Store.Task t) {
-        new AlertDialog.Builder(this).setTitle(t.title)
-            .setItems(new String[]{"Восстановить", "Удалить навсегда"}, (d, w) -> {
-                if (w == 0) { store.restoreTask(t); reload(); rebuildTasks(); toast("Восстановлено"); }
-                else { store.hardDelete(t); reload(); rebuildTasks(); }
-            }).show();
+        java.util.List<Action> acts = new ArrayList<>();
+        acts.add(new Action(R.drawable.ic_undo, "Восстановить", () -> { store.restoreTask(t); reload(); rebuildTasks(); toast("Восстановлено"); }));
+        acts.add(new Action(R.drawable.ic_delete, "Удалить навсегда", () -> { store.hardDelete(t); reload(); rebuildTasks(); }));
+        actionSheet(t.title, acts);
     }
 
     String metaText(Store.Task t) {
@@ -712,6 +716,7 @@ public class MainActivity extends Activity {
     }
 
     String repeatLabel(String r) {
+        if (r != null && r.startsWith("dow:")) return dowLabel(r);
         switch (r) {
             case "daily": return "ежедневно";
             case "weekly": return "еженедельно";
@@ -721,6 +726,15 @@ public class MainActivity extends Activity {
             case "yearly": return "ежегодно";
             default: return r;
         }
+    }
+
+    String dowLabel(String r) {
+        String[] names = {"Вс","Пн","Вт","Ср","Чт","Пт","Сб"};
+        StringBuilder s = new StringBuilder();
+        for (String p : r.substring(4).split(",")) {
+            try { int d = Integer.parseInt(p.trim()); if (d >= 1 && d <= 7) { if (s.length() > 0) s.append(", "); s.append(names[d]); } } catch (Exception ignored) { }
+        }
+        return s.length() > 0 ? s.toString() : "по дням недели";
     }
 
     String fmtTime(String hhmm) {
@@ -771,37 +785,220 @@ public class MainActivity extends Activity {
         else if ("weekly3".equals(repeat)) c.add(Calendar.WEEK_OF_YEAR, 3);
         else if ("monthly".equals(repeat)) c.add(Calendar.MONTH, 1);
         else if ("yearly".equals(repeat)) c.add(Calendar.YEAR, 1);
+        else if (repeat != null && repeat.startsWith("dow:")) {
+            java.util.Set<Integer> days = new java.util.HashSet<>();
+            for (String p : repeat.substring(4).split(",")) { try { days.add(Integer.parseInt(p.trim())); } catch (Exception ignored) { } }
+            if (!days.isEmpty()) {
+                for (int add = 1; add <= 7; add++) {
+                    Calendar n = (Calendar) c.clone();
+                    n.add(Calendar.DAY_OF_MONTH, add);
+                    if (days.contains(n.get(Calendar.DAY_OF_WEEK))) return n.getTimeInMillis();
+                }
+            }
+            c.add(Calendar.WEEK_OF_YEAR, 1);
+        }
         return c.getTimeInMillis();
     }
 
     void rebuildTasks() { if (tab == 0 && stack.isEmpty()) tasksScreen(); }
 
+    // ================= WISHLIST (Хочу) =================
+    void wishScreen() {
+        LinearLayout col = Ui.col(this);
+        col.addView(topBar("Хочу", true, R.drawable.ic_add, this::addWishDialog, null));
+        ScrollView sv = Ui.scroll(this);
+        LinearLayout list = Ui.col(this);
+        list.setPadding(dp(16), dp(12), dp(16), dp(20));
+        if (wishes.isEmpty()) {
+            TextView e = Ui.tv(this, "Список желаний пуст 💝\nДобавьте название товара или ссылку\nна Ozon / Wildberries", 15, Ui.SUB);
+            e.setGravity(Gravity.CENTER);
+            e.setPadding(dp(30), dp(80), dp(30), dp(40));
+            list.addView(e);
+        }
+        for (Store.Wish w : wishes) list.addView(wishRow(w));
+        sv.addView(list);
+        col.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
+        content.addView(col, new FrameLayout.LayoutParams(-1, -1));
+        addFabWish();
+    }
+
+    void addFabWish() {
+        ImageView fab = Ui.icon(this, R.drawable.ic_add, 28, Color.WHITE);
+        fab.setBackground(Ui.oval(Ui.ACCENT));
+        fab.setScaleType(ImageView.ScaleType.CENTER);
+        fab.setOnClickListener(v -> addWishDialog());
+        FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.RIGHT | Gravity.BOTTOM);
+        fp.setMargins(0, 0, dp(18), dp(74));
+        fabLayer.addView(fab, fp);
+    }
+
+    View wishRow(final Store.Wish w) {
+        LinearLayout r = Ui.row(this);
+        r.setPadding(dp(14), dp(12), dp(12), dp(12));
+        r.setBackground(Ui.bg(this, Ui.CARD, 14));
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
+        rp.setMargins(0, 0, 0, dp(10));
+        r.setLayoutParams(rp);
+
+        ImageView ic = Ui.icon(this, R.drawable.ic_favorite, 22, Ui.ACCENT);
+        ic.setPadding(0, 0, dp(10), 0);
+        r.addView(ic);
+
+        LinearLayout info = Ui.col(this);
+        TextView name = Ui.tv(this, w.title, 16, Ui.TEXT);
+        info.addView(name);
+        if (w.price.length() > 0) {
+            TextView price = Ui.tv(this, w.price, 14, Ui.ACCENT, true);
+            price.setPadding(0, dp(2), 0, 0);
+            info.addView(price);
+        }
+        r.addView(info, Ui.weight(1));
+
+        if (w.url.length() > 0) {
+            ImageView open = Ui.iconTouch(this, R.drawable.ic_open, 40, Ui.SUB);
+            r.addView(open);
+        }
+
+        r.setOnClickListener(v -> {
+            if (w.url.length() > 0) {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(w.url))); }
+                catch (Exception e) { toast("Не удалось открыть ссылку"); }
+            }
+        });
+        r.setOnLongClickListener(v -> {
+            new AlertDialog.Builder(this).setTitle(w.title)
+                .setItems(new String[]{"Открыть ссылку", "Удалить"}, (d, ww) -> {
+                    if (ww == 0 && w.url.length() > 0) { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(w.url))); } catch (Exception e) { } }
+                    else if (ww == 1) { store.deleteWish(w.id); reload(); rebuildTasks(); }
+                }).show();
+            return true;
+        });
+        return r;
+    }
+
+    void addWishDialog() {
+        final EditText input = Ui.et(this, "Название или ссылка на товар", 16);
+        final EditText priceIn = Ui.et(this, "Цена (необязательно)", 15);
+        LinearLayout box = Ui.col(this);
+        box.setPadding(dp(24), dp(8), dp(24), 0);
+        box.addView(input);
+        box.addView(priceIn);
+        new AlertDialog.Builder(this).setTitle("Новая вещь в «Хочу»").setView(box)
+            .setPositiveButton("Добавить", (d, w) -> {
+                String raw = input.getText().toString().trim();
+                if (raw.length() == 0) return;
+                Store.Wish wish = parseWish(raw);
+                String p = priceIn.getText().toString().trim();
+                if (p.length() > 0) wish.price = p;
+                store.saveWish(wish);
+                reload();
+                rebuildTasks();
+            })
+            .setNegativeButton("Отмена", null).show();
+        input.requestFocus();
+    }
+
+    Store.Wish parseWish(String raw) {
+        Store.Wish w = new Store.Wish();
+        // price detection from text: "1 999 ₽", "999 руб", "12.50$"
+        java.util.regex.Matcher pm = java.util.regex.Pattern.compile("(\\d[\\d\\s]*(?:\\.\\d+)?)\\s*(₽|руб|р\\.|рублей|RUB|рублей|\\$|usd)?").matcher(raw);
+        String priceFound = "";
+        if (pm.find()) {
+            String num = pm.group(1).trim();
+            String cur = pm.group(2) != null ? pm.group(2) : "";
+            String sym = "₽";
+            if (cur != null && (cur.equals("$") || cur.equalsIgnoreCase("usd"))) sym = "$";
+            priceFound = num + " " + sym;
+        }
+
+        String lower = raw.toLowerCase(Locale.ROOT);
+        if (raw.contains("://") || raw.startsWith("www.") || raw.contains("ozon.ru") || raw.contains("wildberries.ru") || raw.contains("wb.ru") || raw.contains("market.yandex")) {
+            String url = raw;
+            if (!url.startsWith("http")) url = "https://" + url;
+            w.url = url;
+            w.title = titleFromUrl(url);
+        } else {
+            w.title = raw;
+        }
+        if (priceFound.length() > 0 && w.price.length() == 0) w.price = priceFound;
+        if (w.title.length() == 0) w.title = raw;
+        return w;
+    }
+
+    String titleFromUrl(String url) {
+        try {
+            String path = url;
+            int q = path.indexOf('?');
+            if (q > 0) path = path.substring(0, q);
+            String[] seg = path.split("/");
+            // ozon: /product/{slug}-{id}
+            for (int i = 0; i < seg.length; i++) {
+                if ("product".equals(seg[i]) && i + 1 < seg.length) {
+                    String slug = seg[i + 1];
+                    slug = slug.replaceAll("-\\d+$", "");
+                    return humanize(slug);
+                }
+            }
+            // wildberries / others: last meaningful segment with letters
+            for (int i = seg.length - 1; i >= 0; i--) {
+                String s = seg[i];
+                if (s.length() > 3 && s.matches(".*[а-яА-Яa-zA-Z].*") && !s.contains(".")) {
+                    String slug = s.replaceAll("-\\d+$", "");
+                    if (slug.replaceAll("[^а-яА-Яa-zA-Z]", "").length() >= 3) return humanize(slug);
+                }
+            }
+        } catch (Exception ignored) { }
+        return "Товар";
+    }
+
+    String humanize(String slug) {
+        if (slug == null || slug.length() == 0) return "Товар";
+        String s = slug.replace('-', ' ').replace('_', ' ').trim();
+        if (s.length() > 48) s = s.substring(0, 48).trim() + "…";
+        if (s.length() == 0) return "Товар";
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
     void taskMenu(final Store.Task t) {
-        java.util.List<String> opts = new ArrayList<>();
-        opts.add("Редактировать");
-        opts.add(t.pinned == 1 ? "Открепить" : "📌 Закрепить");
-        opts.add(t.dismissed == 1 ? "Вернуть в список" : "Пропустить (Won't Do)");
-        opts.add("Перенести на завтра");
-        opts.add("Перенести на неделю");
-        if (t.repeat.length() > 0) opts.add("Пропустить повторение");
-        opts.add("Подробнее");
-        opts.add("Сохранить как шаблон");
-        opts.add("Удалить");
-        final String[] arr = opts.toArray(new String[0]);
-        new AlertDialog.Builder(this).setTitle(t.title)
-            .setItems(arr, (d, w) -> {
-                String o = arr[w];
-                if ("Редактировать".equals(o)) openEditor(t);
-                else if (o.contains("Закрепить")) { t.pinned = t.pinned == 1 ? 0 : 1; store.saveTask(t); reload(); rebuildTasks(); }
-                else if (o.contains("Пропустить")) { t.dismissed = t.dismissed == 1 ? 0 : 1; store.saveTask(t); reload(); rebuildTasks(); }
-                else if (o.contains("Вернуть в список")) { t.dismissed = 0; store.saveTask(t); reload(); rebuildTasks(); }
-                else if ("Перенести на завтра".equals(o)) { t.due = Store.todayStart() + 86400000L; if (t.hasTime == 1) t.due += timeMillis(t.time); store.saveTask(t); reload(); rebuildTasks(); }
-                else if ("Перенести на неделю".equals(o)) { t.due = Store.todayStart() + 7L * 86400000L; if (t.hasTime == 1) t.due += timeMillis(t.time); store.saveTask(t); reload(); rebuildTasks(); }
-                else if ("Пропустить повторение".equals(o)) { t.repeat = ""; t.done = 1; t.doneAt = System.currentTimeMillis(); store.saveTask(t); reload(); rebuildTasks(); }
-                else if ("Подробнее".equals(o)) pushDetail(t);
-                else if ("Сохранить как шаблон".equals(o)) saveAsTemplate(t);
-                else if ("Удалить".equals(o)) confirmDelete(t);
-            }).show();
+        java.util.List<Action> acts = new ArrayList<>();
+        acts.add(new Action(R.drawable.ic_edit, "Редактировать", () -> openEditor(t)));
+        acts.add(new Action(R.drawable.ic_pin, t.pinned == 1 ? "Открепить" : "Закрепить", () -> { t.pinned = t.pinned == 1 ? 0 : 1; store.saveTask(t); reload(); rebuildTasks(); }));
+        acts.add(new Action(R.drawable.ic_block, t.dismissed == 1 ? "Вернуть в список" : "Пропустить (Won't Do)", () -> { t.dismissed = t.dismissed == 1 ? 0 : 1; store.saveTask(t); reload(); rebuildTasks(); }));
+        acts.add(new Action(R.drawable.ic_today, "Перенести на завтра", () -> { t.due = Store.todayStart() + 86400000L; if (t.hasTime == 1) t.due += timeMillis(t.time); store.saveTask(t); reload(); rebuildTasks(); }));
+        acts.add(new Action(R.drawable.ic_date_range, "Перенести на неделю", () -> { t.due = Store.todayStart() + 7L * 86400000L; if (t.hasTime == 1) t.due += timeMillis(t.time); store.saveTask(t); reload(); rebuildTasks(); }));
+        if (t.repeat.length() > 0) acts.add(new Action(R.drawable.ic_repeat, "Пропустить повторение", () -> { t.repeat = ""; t.done = 1; t.doneAt = System.currentTimeMillis(); store.saveTask(t); reload(); rebuildTasks(); }));
+        acts.add(new Action(R.drawable.ic_info, "Подробнее", () -> pushDetail(t)));
+        acts.add(new Action(R.drawable.ic_template, "Сохранить как шаблон", () -> saveAsTemplate(t)));
+        acts.add(new Action(R.drawable.ic_delete, "Удалить", () -> confirmDelete(t)));
+        actionSheet(t.title, acts);
+    }
+
+    static class Action {
+        int icon;
+        String label;
+        Runnable run;
+        Action(int i, String l, Runnable r) { icon = i; label = l; run = r; }
+    }
+
+    void actionSheet(String title, java.util.List<Action> acts) {
+        LinearLayout list = Ui.col(this);
+        list.setPadding(0, dp(8), 0, dp(8));
+        final AlertDialog[] holder = new AlertDialog[1];
+        for (final Action a : acts) {
+            LinearLayout r = Ui.row(this);
+            r.setPadding(dp(20), dp(13), dp(20), dp(13));
+            ImageView ic = Ui.icon(this, a.icon, 22, Ui.ACCENT);
+            ic.setLayoutParams(new LinearLayout.LayoutParams(dp(32), dp(32)));
+            r.addView(ic);
+            TextView l = Ui.tv(this, a.label, 16, Ui.TEXT);
+            l.setPadding(dp(16), 0, 0, 0);
+            r.addView(l, Ui.weight(1));
+            r.setOnClickListener(v -> { if (holder[0] != null) holder[0].dismiss(); a.run.run(); });
+            list.addView(r);
+        }
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle(title).setView(list).create();
+        holder[0] = dlg;
+        dlg.show();
     }
 
     void confirmDelete(final Store.Task t) {
@@ -1415,22 +1612,39 @@ public class MainActivity extends Activity {
         return streak;
     }
 
+    LinearLayout colorPicker(final int[] chosen) {
+        final LinearLayout row = Ui.row(this);
+        row.setPadding(0, dp(16), 0, 0);
+        renderColorPicker(row, chosen);
+        return row;
+    }
+
+    void renderColorPicker(final LinearLayout row, final int[] chosen) {
+        row.removeAllViews();
+        for (final int c : LIST_COLORS) {
+            FrameLayout wrap = new FrameLayout(this);
+            int outer = dp(46);
+            wrap.setLayoutParams(new LinearLayout.LayoutParams(outer, outer));
+            if (c == chosen[0]) {
+                TextView ring = Ui.tv(this, "", 0, 0);
+                ring.setBackground(Ui.ring(this, c, 3));
+                wrap.addView(ring, new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER));
+            }
+            TextView fill = Ui.tv(this, "", 0, 0);
+            fill.setBackground(Ui.oval(c));
+            wrap.addView(fill, new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER));
+            wrap.setOnClickListener(v -> { chosen[0] = c; renderColorPicker(row, chosen); });
+            row.addView(wrap);
+        }
+    }
+
     void addHabit() {
         final EditText input = Ui.et(this, "Название привычки", 16);
         LinearLayout box = Ui.col(this);
         box.setPadding(dp(24), dp(8), dp(24), 0);
         box.addView(input);
-        // color picker
-        LinearLayout colors = Ui.row(this);
-        colors.setPadding(0, dp(16), 0, 0);
         final int[] chosen = {Ui.ACCENT};
-        for (final int c : LIST_COLORS) {
-            TextView dot = Ui.tv(this, "●", 22, c);
-            dot.setPadding(0, 0, dp(10), 0);
-            dot.setOnClickListener(v -> chosen[0] = c);
-            colors.addView(dot);
-        }
-        box.addView(colors);
+        box.addView(colorPicker(chosen));
         new AlertDialog.Builder(this).setTitle("Новая привычка").setView(box)
             .setPositiveButton("Добавить", (d, w) -> {
                 String s = input.getText().toString().trim();
@@ -1764,20 +1978,24 @@ public class MainActivity extends Activity {
         LinearLayout dots = Ui.row(this);
         final int[] ACCENTS = {0xFF4772FA, 0xFF7C4DFF, 0xFFE91E63, 0xFF43A047, 0xFFFF7043, 0xFF00ACC1, 0xFF8E24AA, 0xFF546E7A};
         for (final int c : ACCENTS) {
-            TextView d = Ui.tv(this, "●", 24, c);
-            d.setGravity(Gravity.CENTER);
-            d.setPadding(dp(2), 0, dp(8), 0);
+            FrameLayout wrap = new FrameLayout(this);
+            int outer = dp(44);
+            wrap.setLayoutParams(new LinearLayout.LayoutParams(outer, outer));
             if (c == Ui.ACCENT) {
-                d.setBackground(Ui.ring(this, Ui.ACCENT, 2));
-                d.setPadding(dp(6), dp(2), dp(6), dp(2));
+                TextView ring = Ui.tv(this, "", 0, 0);
+                ring.setBackground(Ui.ring(this, c, 3));
+                wrap.addView(ring, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
             }
-            d.setOnClickListener(v -> {
+            TextView fill = Ui.tv(this, "", 0, 0);
+            fill.setBackground(Ui.oval(c));
+            wrap.addView(fill, new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER));
+            wrap.setOnClickListener(v -> {
                 p.edit().putInt("accent", c).apply();
                 Ui.init(this);
                 getWindow().setStatusBarColor(Ui.BG);
                 recreate();
             });
-            dots.addView(d);
+            dots.addView(wrap);
         }
         r.addView(dots);
         return r;
@@ -2046,12 +2264,63 @@ public class MainActivity extends Activity {
     }
 
     void pickRepeat() {
-        final String[] labels = {"Не повторять", "Ежедневно", "Еженедельно", "Раз в 2 недели", "Раз в 3 недели", "Ежемесячно", "Ежегодно"};
-        final String[] vals = {"", "daily", "weekly", "weekly2", "weekly3", "monthly", "yearly"};
+        final String[] labels = {"Не повторять", "Ежедневно", "Еженедельно", "Раз в 2 недели", "Раз в 3 недели", "По дням недели…", "Ежемесячно", "Ежегодно"};
         new AlertDialog.Builder(this).setTitle("Повтор").setItems(labels, (d, w) -> {
-            ed.repeat = vals[w];
+            switch (w) {
+                case 0: ed.repeat = ""; break;
+                case 1: ed.repeat = "daily"; break;
+                case 2: ed.repeat = "weekly"; break;
+                case 3: ed.repeat = "weekly2"; break;
+                case 4: ed.repeat = "weekly3"; break;
+                case 5: pickDays(); return;
+                case 6: ed.repeat = "monthly"; break;
+                case 7: ed.repeat = "yearly"; break;
+            }
             buildEditor();
         }).show();
+    }
+
+    void pickDays() {
+        String[] names = {"Пн","Вт","Ср","Чт","Пт","Сб","Вс"};
+        int[] calDays = {2,3,4,5,6,7,1};
+        final boolean[] sel = new boolean[7];
+        java.util.Set<Integer> cur = new java.util.HashSet<>();
+        if (ed.repeat != null && ed.repeat.startsWith("dow:")) {
+            for (String p : ed.repeat.substring(4).split(",")) { try { cur.add(Integer.parseInt(p.trim())); } catch (Exception ignored) { } }
+        }
+        for (int i = 0; i < 7; i++) sel[i] = cur.contains(calDays[i]);
+        final LinearLayout row = Ui.row(this);
+        row.setPadding(0, dp(8), 0, dp(8));
+        renderDayPicker(row, names, sel);
+        LinearLayout box = Ui.col(this);
+        box.setPadding(dp(16), dp(8), dp(16), dp(8));
+        box.addView(row);
+        new AlertDialog.Builder(this).setTitle("Повторять в дни недели").setView(box)
+            .setPositiveButton("Готово", (d, w) -> {
+                StringBuilder sb = new StringBuilder("dow:");
+                boolean any = false;
+                for (int i = 0; i < 7; i++) if (sel[i]) { if (any) sb.append(','); sb.append(calDays[i]); any = true; }
+                ed.repeat = any ? sb.toString() : "weekly";
+                buildEditor();
+            })
+            .setNegativeButton("Отмена", null).show();
+    }
+
+    void renderDayPicker(LinearLayout row, String[] names, boolean[] sel) {
+        row.removeAllViews();
+        for (int i = 0; i < names.length; i++) {
+            final int idx = i;
+            LinearLayout cell = Ui.col(this);
+            cell.setGravity(Gravity.CENTER);
+            TextView c = Ui.tv(this, names[i], 12, sel[i] ? Color.WHITE : Ui.TEXT, sel[i]);
+            c.setGravity(Gravity.CENTER);
+            int s = dp(38);
+            c.setLayoutParams(new LinearLayout.LayoutParams(s, s));
+            c.setBackground(sel[i] ? Ui.oval(Ui.ACCENT) : Ui.stroke(this, Ui.BORDER, 1, 20));
+            c.setOnClickListener(v -> { sel[idx] = !sel[idx]; renderDayPicker(row, names, sel); });
+            cell.addView(c);
+            row.addView(cell, Ui.weight(1));
+        }
     }
 
     void pickPriority() {
@@ -2081,16 +2350,8 @@ public class MainActivity extends Activity {
         LinearLayout box = Ui.col(this);
         box.setPadding(dp(24), dp(8), dp(24), 0);
         box.addView(input);
-        LinearLayout colors = Ui.row(this);
-        colors.setPadding(0, dp(16), 0, 0);
         final int[] chosen = {Ui.ACCENT};
-        for (final int c : LIST_COLORS) {
-            TextView dot = Ui.tv(this, "●", 22, c);
-            dot.setPadding(0, 0, dp(10), 0);
-            dot.setOnClickListener(v -> chosen[0] = c);
-            colors.addView(dot);
-        }
-        box.addView(colors);
+        box.addView(colorPicker(chosen));
         new AlertDialog.Builder(this).setTitle("Новый список").setView(box)
             .setPositiveButton("Создать", (d, w) -> {
                 String s = input.getText().toString().trim();
@@ -2132,11 +2393,8 @@ public class MainActivity extends Activity {
         LinearLayout box = Ui.col(this);
         box.setPadding(dp(24), dp(8), dp(24), 0);
         box.addView(input);
-        LinearLayout colors = Ui.row(this);
-        colors.setPadding(0, dp(16), 0, 0);
         final int[] chosen = {Ui.ACCENT};
-        for (final int c : LIST_COLORS) { TextView dot = Ui.tv(this, "●", 22, c); dot.setPadding(0, 0, dp(10), 0); dot.setOnClickListener(v -> chosen[0] = c); colors.addView(dot); }
-        box.addView(colors);
+        box.addView(colorPicker(chosen));
         new AlertDialog.Builder(this).setTitle("Новый тег").setView(box)
             .setPositiveButton("Создать", (d, w) -> {
                 String s = input.getText().toString().trim();
