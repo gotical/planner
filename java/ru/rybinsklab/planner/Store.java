@@ -18,7 +18,7 @@ public class Store {
         String title = "";
         String notes = "";
         String time = "";          // "HH:mm" when hasTime
-        String repeat = "";        // "", "daily", "weekly", "monthly", "yearly"
+        String repeat = "";        // "", "daily", "weekly", "weekly2", "weekly3", "monthly", "yearly"
         long listId = 0;           // 0 = inbox
         long due = 0;              // midnight of due date (or with time if hasTime)
         long reminder = 0;         // earliest absolute millis, 0 = none (for indicator)

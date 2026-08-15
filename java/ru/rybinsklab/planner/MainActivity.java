@@ -715,6 +715,8 @@ public class MainActivity extends Activity {
         switch (r) {
             case "daily": return "ежедневно";
             case "weekly": return "еженедельно";
+            case "weekly2": return "раз в 2 недели";
+            case "weekly3": return "раз в 3 недели";
             case "monthly": return "ежемесячно";
             case "yearly": return "ежегодно";
             default: return r;
@@ -765,6 +767,8 @@ public class MainActivity extends Activity {
         Calendar c = Calendar.getInstance(); c.setTimeInMillis(due);
         if ("daily".equals(repeat)) c.add(Calendar.DAY_OF_MONTH, 1);
         else if ("weekly".equals(repeat)) c.add(Calendar.WEEK_OF_YEAR, 1);
+        else if ("weekly2".equals(repeat)) c.add(Calendar.WEEK_OF_YEAR, 2);
+        else if ("weekly3".equals(repeat)) c.add(Calendar.WEEK_OF_YEAR, 3);
         else if ("monthly".equals(repeat)) c.add(Calendar.MONTH, 1);
         else if ("yearly".equals(repeat)) c.add(Calendar.YEAR, 1);
         return c.getTimeInMillis();
@@ -2042,8 +2046,8 @@ public class MainActivity extends Activity {
     }
 
     void pickRepeat() {
-        final String[] labels = {"Не повторять", "Ежедневно", "Еженедельно", "Ежемесячно", "Ежегодно"};
-        final String[] vals = {"", "daily", "weekly", "monthly", "yearly"};
+        final String[] labels = {"Не повторять", "Ежедневно", "Еженедельно", "Раз в 2 недели", "Раз в 3 недели", "Ежемесячно", "Ежегодно"};
+        final String[] vals = {"", "daily", "weekly", "weekly2", "weekly3", "monthly", "yearly"};
         new AlertDialog.Builder(this).setTitle("Повтор").setItems(labels, (d, w) -> {
             ed.repeat = vals[w];
             buildEditor();
