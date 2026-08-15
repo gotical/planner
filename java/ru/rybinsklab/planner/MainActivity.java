@@ -1879,7 +1879,7 @@ public class MainActivity extends Activity {
         else if ("site".equals(a)) {
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://rybinsklab.ru"))); } catch (Exception ignored) { }
         } else if ("rate".equals(a)) {
-            toast("Спасибо! Поставьте оценку в магазине");
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/gotical/planner"))); } catch (Exception ignored) { }
         }
     }
 
@@ -2053,7 +2053,7 @@ public class MainActivity extends Activity {
             .setNegativeButton("Отмена", null).show());
         body.addView(clear);
 
-        body.addView(row("Версия", "2.0"));
+        body.addView(row("Версия", "2.4"));
         body.addView(Ui.spacer(this, dp(20)));
         body.addView(Ui.tv(this, "© РыбинскLAB · rybinsklab.ru", 12, Ui.SUB));
 
@@ -2147,7 +2147,7 @@ public class MainActivity extends Activity {
         nm.setGravity(Gravity.CENTER);
         body.addView(nm);
         body.addView(Ui.spacer(this, dp(4)));
-        TextView ver = Ui.tv(this, "Версия 2.0", 13, Ui.SUB);
+        TextView ver = Ui.tv(this, "Версия 2.4", 13, Ui.SUB);
         ver.setGravity(Gravity.CENTER);
         body.addView(ver);
 
