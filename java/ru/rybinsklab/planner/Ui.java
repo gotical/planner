@@ -3,6 +3,7 @@ package ru.rybinsklab.planner;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.PorterDuff;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
@@ -10,6 +11,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -64,6 +66,20 @@ public final class Ui {
         g.setColor(color);
         g.setCornerRadius(dp(c, radius));
         return g;
+    }
+    static ImageView icon(Context c, int resId, int sizeDp, int color) {
+        ImageView iv = new ImageView(c);
+        iv.setImageResource(resId);
+        iv.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+        int s = dp(c, sizeDp);
+        iv.setLayoutParams(new LinearLayout.LayoutParams(s, s));
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        return iv;
+    }
+    static ImageView iconTouch(Context c, int resId, int sizeDp, int color) {
+        ImageView iv = icon(c, resId, sizeDp, color);
+        iv.setScaleType(ImageView.ScaleType.CENTER);
+        return iv;
     }
     static GradientDrawable oval(int color) { GradientDrawable g = new GradientDrawable(); g.setShape(GradientDrawable.OVAL); g.setColor(color); return g; }
     static GradientDrawable ring(Context c, int color, float width) { GradientDrawable g = new GradientDrawable(); g.setShape(GradientDrawable.OVAL); g.setStroke(dp(c, width), color); return g; }

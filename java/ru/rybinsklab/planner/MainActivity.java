@@ -7,6 +7,7 @@ import android.app.TimePickerDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.PorterDuff;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -90,11 +91,11 @@ public class MainActivity extends Activity {
         nav.setPadding(0, dp(4), 0, dp(6));
         nav.setGravity(Gravity.CENTER);
 
-        nav.addView(navItem("✓", "Задачи", 0), Ui.weight(1));
-        nav.addView(navItem("▦", "Календарь", 1), Ui.weight(1));
-        nav.addView(navItem("◐", "Фокус", 2), Ui.weight(1));
-        nav.addView(navItem("✦", "Привычки", 3), Ui.weight(1));
-        nav.addView(navItem("☰", "Ещё", 4), Ui.weight(1));
+        nav.addView(navItem(R.drawable.ic_tasks, "Задачи", 0), Ui.weight(1));
+        nav.addView(navItem(R.drawable.ic_calendar, "Календарь", 1), Ui.weight(1));
+        nav.addView(navItem(R.drawable.ic_focus, "Фокус", 2), Ui.weight(1));
+        nav.addView(navItem(R.drawable.ic_habit, "Привычки", 3), Ui.weight(1));
+        nav.addView(navItem(R.drawable.ic_more, "Ещё", 4), Ui.weight(1));
 
         FrameLayout.LayoutParams np = new FrameLayout.LayoutParams(-1, dp(60), Gravity.BOTTOM);
         root.addView(nav, np);
@@ -108,16 +109,15 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
-    View navItem(String icon, String label, int id) {
+    View navItem(int resId, String label, int id) {
         LinearLayout x = Ui.col(this);
         x.setGravity(Gravity.CENTER);
-        TextView i = Ui.tv(this, icon, 22, id == tab ? Ui.ACCENT : Ui.FAINT);
+        ImageView i = Ui.icon(this, resId, 24, id == tab ? Ui.ACCENT : Ui.FAINT);
         TextView l = Ui.tv(this, label, 10, id == tab ? Ui.ACCENT : Ui.FAINT);
-        i.setGravity(Gravity.CENTER);
         l.setGravity(Gravity.CENTER);
         x.addView(i);
         x.addView(l);
-        x.setTag(new TextView[]{i, l});
+        x.setTag(new View[]{i, l});
         x.setOnClickListener(v -> { tab = id; closeDrawer(); showTab(id); });
         return x;
     }
@@ -140,10 +140,11 @@ public class MainActivity extends Activity {
     void updateNav() {
         for (int i = 0; i < nav.getChildCount(); i++) {
             View v = nav.getChildAt(i);
-            if (v.getTag() instanceof TextView[]) {
-                TextView[] p = (TextView[]) v.getTag();
-                p[0].setTextColor(i == tab ? Ui.ACCENT : Ui.FAINT);
-                p[1].setTextColor(i == tab ? Ui.ACCENT : Ui.FAINT);
+            if (v.getTag() instanceof View[]) {
+                View[] p = (View[]) v.getTag();
+                int c = i == tab ? Ui.ACCENT : Ui.FAINT;
+                ((ImageView) p[0]).setColorFilter(c, PorterDuff.Mode.SRC_IN);
+                ((TextView) p[1]).setTextColor(c);
             }
         }
     }
@@ -181,23 +182,22 @@ public class MainActivity extends Activity {
 
         Ui.divider(col, this, dp(20));
 
-        col.addView(drawerItem("⊙", "Сегодня", "today", null));
-        col.addView(drawerItem("▸", "Завтра", "tomorrow", null));
-        col.addView(drawerItem("⌛", "Следующие 7 дней", "next7", null));
-        col.addView(drawerItem("≡", "Все задачи", "all", null));
-        col.addView(drawerItem("✓", "Завершённые", "completed", null));
-        col.addView(drawerItem("⊘", "Пропущенные", "skipped", null));
-        col.addView(drawerItem("🗑", "Корзина", "trash", null));
+        col.addView(drawerItem(R.drawable.ic_today, "Сегодня", "today", null));
+        col.addView(drawerItem(R.drawable.ic_event, "Завтра", "tomorrow", null));
+        col.addView(drawerItem(R.drawable.ic_date_range, "Следующие 7 дней", "next7", null));
+        col.addView(drawerItem(R.drawable.ic_list, "Все задачи", "all", null));
+        col.addView(drawerItem(R.drawable.ic_done_all, "Завершённые", "completed", null));
+        col.addView(drawerItem(R.drawable.ic_block, "Пропущенные", "skipped", null));
+        col.addView(drawerItem(R.drawable.ic_delete, "Корзина", "trash", null));
 
         Ui.divider(col, this, dp(20));
 
         TextView lh = Ui.tv(this, "Списки", 12, Ui.SUB, true);
         lh.setPadding(dp(20), dp(14), dp(20), dp(6));
         col.addView(lh);
-        col.addView(drawerItem("▢", "Входящие", "inbox", null));
+        col.addView(drawerItem(R.drawable.ic_inbox, "Входящие", "inbox", null));
         for (Store.TList l : lists) {
-            final long lid = l.id;
-            col.addView(drawerItem("●", l.name, "list:" + l.id, l.color));
+            col.addView(drawerItem(R.drawable.ic_list, l.name, "list:" + l.id, l.color));
         }
         TextView addList = Ui.tv(this, "  +  Добавить список", 14, Ui.ACCENT);
         addList.setPadding(dp(20), dp(12), dp(20), dp(12));
@@ -210,7 +210,7 @@ public class MainActivity extends Activity {
             th.setPadding(dp(20), dp(14), dp(20), dp(6));
             col.addView(th);
             for (Store.Tag g : tags) {
-                col.addView(drawerItem("●", g.name, "tag:" + g.id, g.color));
+                col.addView(drawerItem(R.drawable.ic_tag, g.name, "tag:" + g.id, g.color));
             }
         }
         TextView addTag = Ui.tv(this, "  +  Добавить тег", 14, Ui.ACCENT);
@@ -219,8 +219,8 @@ public class MainActivity extends Activity {
         col.addView(addTag);
 
         Ui.divider(col, this, dp(20));
-        col.addView(drawerItem("⚙", "Настройки", "__settings", null));
-        col.addView(drawerItem("ℹ", "О приложении", "__about", null));
+        col.addView(drawerItem(R.drawable.ic_settings, "Настройки", "__settings", null));
+        col.addView(drawerItem(R.drawable.ic_info, "О приложении", "__about", null));
 
         sv.addView(col);
         panel.addView(sv, new LinearLayout.LayoutParams(-1, -1));
@@ -230,13 +230,12 @@ public class MainActivity extends Activity {
         root.addView(drawerLayer, new FrameLayout.LayoutParams(-1, -1));
     }
 
-    View drawerItem(String icon, String label, final String target, Integer color) {
+    View drawerItem(int resId, String label, final String target, Integer color) {
         LinearLayout r = Ui.row(this);
         r.setPadding(dp(20), dp(12), dp(16), dp(12));
         int c = color != null ? color : Ui.SUB;
-        TextView ic = Ui.tv(this, icon, 16, c);
-        ic.setGravity(Gravity.CENTER);
-        ic.setLayoutParams(new LinearLayout.LayoutParams(dp(28), -2));
+        ImageView ic = Ui.icon(this, resId, 22, c);
+        ic.setLayoutParams(new LinearLayout.LayoutParams(dp(28), dp(28)));
         r.addView(ic);
         boolean sel = view.equals(target);
         r.addView(Ui.tv(this, label, 15, sel ? Ui.ACCENT : Ui.TEXT, sel), Ui.weight(1));
@@ -270,9 +269,7 @@ public class MainActivity extends Activity {
         LinearLayout tb = Ui.row(this);
         tb.setPadding(dp(8), dp(10), dp(16), dp(10));
         tb.setBackgroundColor(Ui.CARD);
-        TextView bk = Ui.tv(this, "‹", 30, Ui.ACCENT);
-        bk.setGravity(Gravity.CENTER);
-        bk.setPadding(dp(8), 0, dp(4), 0);
+        ImageView bk = Ui.iconTouch(this, R.drawable.ic_back, 40, Ui.ACCENT);
         bk.setOnClickListener(v -> onBack.run());
         tb.addView(bk);
         TextView ti = Ui.tv(this, title, 18, Ui.TEXT, true);
@@ -298,24 +295,20 @@ public class MainActivity extends Activity {
     }
 
     // ================= HEADER =================
-    LinearLayout topBar(String title, boolean hamburger, String rightIcon, Runnable onRight, Runnable onLeft) {
+    LinearLayout topBar(String title, boolean hamburger, int rightIcon, Runnable onRight, Runnable onLeft) {
         LinearLayout tb = Ui.row(this);
-        tb.setPadding(dp(8), dp(10), dp(14), dp(10));
+        tb.setPadding(dp(8), dp(8), dp(12), dp(8));
         tb.setBackgroundColor(Ui.CARD);
         if (hamburger) {
-            TextView ham = Ui.tv(this, "≡", 26, Ui.TEXT);
-            ham.setGravity(Gravity.CENTER);
-            ham.setPadding(dp(8), 0, dp(6), 0);
+            ImageView ham = Ui.iconTouch(this, R.drawable.ic_menu, 40, Ui.TEXT);
             ham.setOnClickListener(v -> { if (onLeft != null) onLeft.run(); else openDrawer(); });
             tb.addView(ham);
         }
         TextView ti = Ui.tv(this, title, 20, Ui.TEXT, true);
         ti.setPadding(dp(6), 0, dp(6), 0);
         tb.addView(ti, Ui.weight(1));
-        if (rightIcon != null) {
-            TextView r = Ui.tv(this, rightIcon, 22, Ui.ACCENT);
-            r.setGravity(Gravity.CENTER);
-            r.setPadding(dp(12), dp(4), dp(4), dp(4));
+        if (rightIcon != 0) {
+            ImageView r = Ui.iconTouch(this, rightIcon, 40, Ui.ACCENT);
             r.setOnClickListener(v -> onRight.run());
             tb.addView(r);
         }
@@ -350,10 +343,8 @@ public class MainActivity extends Activity {
     LinearLayout tasksHeader() {
         LinearLayout tb = Ui.row(this);
         tb.setBackgroundColor(Ui.CARD);
-        tb.setPadding(dp(6), dp(10), dp(8), dp(10));
-        TextView ham = Ui.tv(this, "≡", 26, Ui.TEXT);
-        ham.setGravity(Gravity.CENTER);
-        ham.setPadding(dp(10), 0, dp(8), 0);
+        tb.setPadding(dp(6), dp(8), dp(6), dp(8));
+        ImageView ham = Ui.iconTouch(this, R.drawable.ic_menu, 40, Ui.TEXT);
         ham.setOnClickListener(v -> openDrawer());
         tb.addView(ham);
         LinearLayout titles = Ui.col(this);
@@ -362,14 +353,10 @@ public class MainActivity extends Activity {
         TextView sub = Ui.tv(this, todayLine(), 12, Ui.SUB);
         titles.addView(sub);
         tb.addView(titles, Ui.weight(1));
-        TextView search = Ui.tv(this, "🔍", 20, Ui.TEXT);
-        search.setGravity(Gravity.CENTER);
-        search.setPadding(dp(12), dp(4), dp(4), dp(4));
+        ImageView search = Ui.iconTouch(this, R.drawable.ic_search, 40, Ui.TEXT);
         search.setOnClickListener(v -> openSearch());
         tb.addView(search);
-        TextView add = Ui.tv(this, "＋", 24, Ui.ACCENT);
-        add.setGravity(Gravity.CENTER);
-        add.setPadding(dp(12), dp(4), dp(4), dp(4));
+        ImageView add = Ui.iconTouch(this, R.drawable.ic_add, 40, Ui.ACCENT);
         add.setOnClickListener(v -> openEditorNew());
         tb.addView(add);
         return tb;
@@ -896,9 +883,9 @@ public class MainActivity extends Activity {
 
     // ================= FAB / QUICK ADD =================
     void addFab() {
-        TextView fab = Ui.tv(this, "+", 30, Color.WHITE, true);
-        fab.setGravity(Gravity.CENTER);
+        ImageView fab = Ui.icon(this, R.drawable.ic_add, 28, Color.WHITE);
         fab.setBackground(Ui.oval(Ui.ACCENT));
+        fab.setScaleType(ImageView.ScaleType.CENTER);
         fab.setOnClickListener(v -> quickAdd());
         FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.RIGHT | Gravity.BOTTOM);
         fp.setMargins(0, 0, dp(18), dp(74));
@@ -1182,7 +1169,7 @@ public class MainActivity extends Activity {
         LinearLayout cell = Ui.col(this);
         cell.setGravity(Gravity.CENTER);
         boolean sel = Store.sameDay(millis, calSel.getTimeInMillis());
-        TextView num = Ui.tv(this, String.valueOf(d), 15, isToday ? Ui.ACCENT : (sel ? Color.WHITE : Ui.TEXT), sel || isToday);
+        TextView num = Ui.tv(this, String.valueOf(d), 15, sel ? Color.WHITE : (isToday ? Ui.ACCENT : Ui.TEXT), sel || isToday);
         num.setGravity(Gravity.CENTER);
         int ns = dp(34);
         num.setLayoutParams(new LinearLayout.LayoutParams(ns, ns));
@@ -1224,7 +1211,7 @@ public class MainActivity extends Activity {
         content.removeAllViews();
         fabLayer.removeAllViews();
         LinearLayout col = Ui.col(this);
-        col.addView(topBar("Фокус", false, null, null, null));
+        col.addView(topBar("Фокус", false, 0, null, null));
         ScrollView sv = Ui.scroll(this);
         LinearLayout body = Ui.col(this);
         body.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -1338,7 +1325,7 @@ public class MainActivity extends Activity {
         content.removeAllViews();
         fabLayer.removeAllViews();
         LinearLayout col = Ui.col(this);
-        col.addView(topBar("Привычки", false, "＋", this::addHabit, null));
+        col.addView(topBar("Привычки", false, R.drawable.ic_add, this::addHabit, null));
         ScrollView sv = Ui.scroll(this);
         LinearLayout list = Ui.col(this);
         list.setPadding(dp(16), dp(12), dp(16), dp(20));
@@ -1457,7 +1444,7 @@ public class MainActivity extends Activity {
     // ================= MORE =================
     void moreScreen() {
         LinearLayout col = Ui.col(this);
-        col.addView(topBar("Ещё", false, null, null, null));
+        col.addView(topBar("Ещё", false, 0, null, null));
         ScrollView sv = Ui.scroll(this);
         LinearLayout body = Ui.col(this);
         body.setPadding(dp(16), dp(16), dp(16), dp(20));
@@ -1906,14 +1893,14 @@ public class MainActivity extends Activity {
         body.addView(edTitleInput);
 
         // date row
-        body.addView(editorRow("🗓", "Дата", ed.due > 0 ? dateLabel() : "Сегодня / Завтра / Выбрать", () -> pickDate()));
-        if (ed.hasTime == 1) body.addView(editorRow("🕐", "Время", ed.time, this::pickTime));
-        body.addView(editorRow("🔔", "Напоминание", remLabel(), this::pickReminder));
-        body.addView(editorRow("⟳", "Повтор", repeatLabel(ed.repeat), this::pickRepeat));
-        body.addView(editorRow("!", "Приоритет", prioLabel(), this::pickPriority));
-        body.addView(editorRow("▢", "Список", listName(ed.listId), this::pickList));
-        body.addView(editorRow("#", "Теги", tagLabel(), this::pickTags));
-        body.addView(editorRow("⧉", "Шаблон", "Применить шаблон", this::pickTemplate));
+        body.addView(editorRow(R.drawable.ic_event, "Дата", ed.due > 0 ? dateLabel() : "Сегодня / Завтра / Выбрать", () -> pickDate()));
+        if (ed.hasTime == 1) body.addView(editorRow(R.drawable.ic_schedule, "Время", ed.time, this::pickTime));
+        body.addView(editorRow(R.drawable.ic_notifications, "Напоминание", remLabel(), this::pickReminder));
+        body.addView(editorRow(R.drawable.ic_repeat, "Повтор", repeatLabel(ed.repeat), this::pickRepeat));
+        body.addView(editorRow(R.drawable.ic_flag, "Приоритет", prioLabel(), this::pickPriority));
+        body.addView(editorRow(R.drawable.ic_list, "Список", listName(ed.listId), this::pickList));
+        body.addView(editorRow(R.drawable.ic_tag, "Теги", tagLabel(), this::pickTags));
+        body.addView(editorRow(R.drawable.ic_template, "Шаблон", "Применить шаблон", this::pickTemplate));
 
         // notes
         body.addView(Ui.spacer(this, dp(10)));
@@ -1973,11 +1960,13 @@ public class MainActivity extends Activity {
         push(col);
     }
 
-    View editorRow(String icon, String label, String value, Runnable onClick) {
+    View editorRow(int resId, String label, String value, Runnable onClick) {
         LinearLayout r = Ui.row(this);
         r.setPadding(dp(0), dp(12), dp(0), dp(12));
-        TextView ic = Ui.tv(this, icon, 16, Ui.ACCENT);
-        ic.setLayoutParams(new LinearLayout.LayoutParams(dp(32), -2));
+        ImageView ic = Ui.icon(this, resId, 20, Ui.ACCENT);
+        LinearLayout.LayoutParams iclp = new LinearLayout.LayoutParams(dp(36), dp(36));
+        ic.setLayoutParams(iclp);
+        ic.setScaleType(ImageView.ScaleType.CENTER);
         r.addView(ic);
         r.addView(Ui.tv(this, label, 15, Ui.TEXT), Ui.weight(1));
         TextView val = Ui.tv(this, value, 14, Ui.SUB);
