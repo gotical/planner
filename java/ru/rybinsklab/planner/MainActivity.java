@@ -1361,8 +1361,7 @@ public class MainActivity extends Activity {
             st.setPadding(dp(8), 0, dp(4), 0);
             top.addView(st);
         }
-        TextView del = Ui.tv(this, "✕", 16, Ui.FAINT);
-        del.setPadding(dp(8), dp(4), dp(4), dp(4));
+        ImageView del = Ui.iconTouch(this, R.drawable.ic_delete, 36, Ui.FAINT);
         del.setOnClickListener(v -> {
             new AlertDialog.Builder(this).setMessage("Удалить привычку «" + h.name + "»?")
                 .setPositiveButton("Удалить", (x, y) -> { store.deleteHabit(h.id); reload(); habitsScreen(); })
@@ -1480,14 +1479,7 @@ public class MainActivity extends Activity {
 
         // menu
         body.addView(Ui.spacer(this, dp(16)));
-        body.addView(menuCard(new String[][]{
-            {"📊", "Подробная статистика", "stats"},
-            {"⚙", "Настройки", "s"},
-            {"☾", Ui.dark ? "Светлая тема" : "Тёмная тема", "theme"},
-            {"ℹ", "О приложении", "a"},
-            {"↗", "Сайт разработчика", "site"},
-            {"★", "Оценить приложение", "rate"},
-        }));
+        body.addView(menuCard());
 
         sv.addView(body);
         col.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -1519,24 +1511,28 @@ public class MainActivity extends Activity {
         return c;
     }
 
-    View menuCard(String[][] items) {
+    View menuCard() {
         LinearLayout box = Ui.col(this);
         box.setPadding(dp(6), dp(4), dp(6), dp(4));
         box.setBackground(Ui.bg(this, Ui.CARD, 18));
-        for (String[] it : items) {
-            LinearLayout r = Ui.row(this);
-            r.setPadding(dp(14), dp(14), dp(14), dp(14));
-            TextView ic = Ui.tv(this, it[0], 18, Ui.ACCENT);
-            ic.setLayoutParams(new LinearLayout.LayoutParams(dp(30), -2));
-            r.addView(ic);
-            r.addView(Ui.tv(this, it[1], 16, Ui.TEXT), Ui.weight(1));
-            r.addView(Ui.tv(this, "›", 22, Ui.FAINT));
-            final String action = it[2];
-            r.setOnClickListener(v -> onMenu(action));
-            box.addView(r);
-            // divider except last
-        }
+        box.addView(menuItem(R.drawable.ic_chart, "Подробная статистика", "stats"));
+        box.addView(menuItem(R.drawable.ic_settings, "Настройки", "s"));
+        box.addView(menuItem(R.drawable.ic_theme, Ui.dark ? "Светлая тема" : "Тёмная тема", "theme"));
+        box.addView(menuItem(R.drawable.ic_info, "О приложении", "a"));
+        box.addView(menuItem(R.drawable.ic_language, "Сайт разработчика", "site"));
+        box.addView(menuItem(R.drawable.ic_star, "Оценить приложение", "rate"));
         return box;
+    }
+
+    View menuItem(int resId, String label, final String action) {
+        LinearLayout r = Ui.row(this);
+        r.setPadding(dp(14), dp(14), dp(14), dp(14));
+        ImageView ic = Ui.icon(this, resId, 22, Ui.ACCENT);
+        r.addView(ic);
+        r.addView(Ui.tv(this, label, 16, Ui.TEXT), Ui.weight(1));
+        r.addView(Ui.tv(this, "›", 22, Ui.FAINT));
+        r.setOnClickListener(v -> onMenu(action));
+        return r;
     }
 
     void onMenu(String a) {
@@ -1804,8 +1800,8 @@ public class MainActivity extends Activity {
         body.setGravity(Gravity.CENTER_HORIZONTAL);
         body.setPadding(dp(30), dp(40), dp(30), dp(30));
 
-        TextView icon = Ui.tv(this, "✓", 44, Color.WHITE, true);
-        icon.setGravity(Gravity.CENTER);
+        ImageView icon = Ui.icon(this, R.drawable.ic_tasks, 44, Color.WHITE);
+        icon.setScaleType(ImageView.ScaleType.CENTER);
         icon.setBackground(Ui.oval(Ui.ACCENT));
         int is = dp(88);
         icon.setLayoutParams(new LinearLayout.LayoutParams(is, is));
@@ -1871,8 +1867,7 @@ public class MainActivity extends Activity {
         LinearLayout hb = Ui.row(this);
         hb.setBackgroundColor(Ui.CARD);
         hb.setPadding(dp(8), dp(8), dp(8), dp(8));
-        TextView cancel = Ui.tv(this, "✕", 20, Ui.SUB);
-        cancel.setPadding(dp(12), dp(6), dp(12), dp(6));
+        ImageView cancel = Ui.iconTouch(this, R.drawable.ic_close, 40, Ui.SUB);
         cancel.setOnClickListener(v -> pop());
         hb.addView(cancel);
         TextView save = Ui.tv(this, "Сохранить", 15, Color.WHITE, true);
@@ -1921,8 +1916,7 @@ public class MainActivity extends Activity {
             TextView sn = Ui.tv(this, s.title, 15, Ui.TEXT);
             sn.setPadding(dp(10), 0, 0, 0);
             sr.addView(sn, Ui.weight(1));
-            TextView rm = Ui.tv(this, "✕", 16, Ui.FAINT);
-            rm.setPadding(dp(10), dp(6), dp(4), dp(6));
+            ImageView rm = Ui.iconTouch(this, R.drawable.ic_close, 36, Ui.FAINT);
             rm.setOnClickListener(v -> { ed.subs.remove(s); buildEditor(); });
             sr.addView(rm);
             body.addView(sr);
