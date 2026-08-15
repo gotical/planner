@@ -625,9 +625,6 @@ public class MainActivity extends Activity {
                 list.addView(hd);
             }
             list.addView(taskRow(t));
-            for (int si = 0; si < t.subs.size(); si++) {
-                list.addView(subtaskRow(t, t.subs.get(si), si));
-            }
         }
         if (shown.isEmpty()) {
             TextView e = Ui.tv(this, emptyText(), 16, Ui.SUB);
@@ -644,14 +641,15 @@ public class MainActivity extends Activity {
     }
 
     View taskRow(final Store.Task t) {
-        LinearLayout r = Ui.row(this);
-        r.setPadding(dp(14), dp(8), dp(12), dp(8));
-        r.setBackground(Ui.bg(this, Ui.CARD, 14));
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
-        rp.setMargins(dp(16), 0, dp(16), dp(8));
-        r.setLayoutParams(rp);
-        if (t.dismissed == 1) r.setAlpha(0.55f);
+        LinearLayout card = Ui.col(this);
+        card.setPadding(dp(14), dp(8), dp(12), dp(8));
+        card.setBackground(Ui.bg(this, Ui.CARD, 14));
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+        cp.setMargins(dp(16), 0, dp(16), dp(8));
+        card.setLayoutParams(cp);
+        if (t.dismissed == 1) card.setAlpha(0.55f);
 
+        LinearLayout r = Ui.row(this);
         TextView check = Ui.tv(this, t.done == 1 ? "✓" : "", 14, Color.WHITE, true);
         check.setGravity(Gravity.CENTER);
         int cs = dp(24);
@@ -685,10 +683,23 @@ public class MainActivity extends Activity {
             int fc = t.priority == 3 ? Ui.RED : (t.priority == 2 ? Ui.ORANGE : Ui.BLUE);
             r.addView(Ui.tv(this, f, 14, fc, true));
         }
+        card.addView(r);
 
-        r.setOnClickListener(v -> { if (t.deleted == 1) trashMenu(t); else openEditor(t); });
-        r.setOnLongClickListener(v -> { if (t.deleted == 1) trashMenu(t); else taskMenu(t); return true; });
-        return r;
+        // subtasks inside the same card
+        if (t.subs.size() > 0) {
+            View div = new View(this);
+            div.setBackgroundColor(Ui.DIVIDER);
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, 1);
+            dlp.setMargins(0, dp(6), 0, dp(4));
+            card.addView(div, dlp);
+            for (int si = 0; si < t.subs.size(); si++) {
+                card.addView(subtaskRow(t, t.subs.get(si), si));
+            }
+        }
+
+        card.setOnClickListener(v -> { if (t.deleted == 1) trashMenu(t); else openEditor(t); });
+        card.setOnLongClickListener(v -> { if (t.deleted == 1) trashMenu(t); else taskMenu(t); return true; });
+        return card;
     }
 
     void trashMenu(final Store.Task t) {
@@ -700,7 +711,7 @@ public class MainActivity extends Activity {
 
     View subtaskRow(final Store.Task parent, final Store.Task s, int index) {
         LinearLayout r = Ui.row(this);
-        r.setPadding(dp(30), dp(5), dp(16), dp(5));
+        r.setPadding(dp(22), dp(5), dp(0), dp(5));
         TextView num = Ui.tv(this, (index + 1) + ".", 13, Ui.FAINT);
         r.addView(num);
         TextView ch = Ui.tv(this, s.done == 1 ? "✓" : "", 11, Color.WHITE, true);
