@@ -36,5 +36,12 @@ public class DailyReceiver extends BroadcastReceiver {
          .setAutoCancel(true)
          .setContentIntent(pi);
         try { nm.notify(778, b.build()); } catch (Exception ignored) { }
+
+        // ежедневная синхронизация задач в системный календарь
+        try {
+            if (ctx.getSharedPreferences("planner", 0).getBoolean("cal_sync", false)) {
+                CalendarSync.syncAll(ctx, store);
+            }
+        } catch (Exception ignored) { }
     }
 }

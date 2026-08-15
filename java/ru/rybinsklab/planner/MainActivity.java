@@ -4,8 +4,10 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
+import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.Typeface;
@@ -65,6 +67,31 @@ public class MainActivity extends Activity {
         reload();
         buildShell();
         showTab(0);
+        maybeSync();
+    }
+
+    static final int REQ_CALENDAR = 8001;
+
+    void maybeSync() {
+        SharedPreferences p = getSharedPreferences("planner", 0);
+        if (!p.getBoolean("cal_sync", false)) return;
+        if (checkSelfPermission(Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) return;
+        new Thread(() -> { try { CalendarSync.syncAll(this, store); } catch (Exception ignored) { } }).start();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(code, perms, results);
+        if (code == REQ_CALENDAR) {
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+                getSharedPreferences("planner", 0).edit().putBoolean("cal_sync", true).apply();
+                maybeSync();
+                toast("Синхронизация с календарём включена");
+            } else {
+                getSharedPreferences("planner", 0).edit().putBoolean("cal_sync", false).apply();
+                toast("Нет разрешения на календарь");
+            }
+        }
     }
 
     void reload() {
@@ -222,6 +249,7 @@ public class MainActivity extends Activity {
         col.addView(addTag);
 
         Ui.divider(col, this, dp(20));
+        col.addView(drawerItem(R.drawable.ic_template, "Шаблоны", "__templates", null));
         col.addView(drawerItem(R.drawable.ic_settings, "Настройки", "__settings", null));
         col.addView(drawerItem(R.drawable.ic_info, "О приложении", "__about", null));
 
@@ -246,6 +274,7 @@ public class MainActivity extends Activity {
             closeDrawer();
             if ("__settings".equals(target)) { pushSettings(); return; }
             if ("__about".equals(target)) { pushAbout(); return; }
+            if ("__templates".equals(target)) { pushTemplateEditor(); return; }
             view = target;
             tab = 0;
             showTab(0);
@@ -818,6 +847,7 @@ public class MainActivity extends Activity {
         reload();
         rebuildTasks();
         toast("Выполнено");
+        maybeSync();
     }
 
     Store.Task storeSaveWithSubs(Store.Task t) {
@@ -2035,6 +2065,34 @@ public class MainActivity extends Activity {
             else Reminders.cancelDailyReview(this);
         }));
 
+        // calendar sync
+        body.addView(switchRow("Календарь устройства (задачи)", p.getBoolean("cal_sync", false), checked -> {
+            if (checked) {
+                if (checkSelfPermission(Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{Manifest.permission.WRITE_CALENDAR, Manifest.permission.READ_CALENDAR}, REQ_CALENDAR);
+                    return;
+                }
+                p.edit().putBoolean("cal_sync", true).apply();
+                maybeSync();
+                toast("Синхронизация включена");
+            } else {
+                p.edit().putBoolean("cal_sync", false).apply();
+            }
+        }));
+        LinearLayout syncNow = row("Синхронизировать сейчас", "");
+        TextView synb = Ui.tv(this, "Синхронизировать", 14, Ui.ACCENT);
+        syncNow.addView(synb);
+        syncNow.setOnClickListener(v -> {
+            if (checkSelfPermission(Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.WRITE_CALENDAR, Manifest.permission.READ_CALENDAR}, REQ_CALENDAR);
+                return;
+            }
+            p.edit().putBoolean("cal_sync", true).apply();
+            maybeSync();
+            toast("Синхронизация выполнена");
+        });
+        body.addView(syncNow);
+
         // backup
         LinearLayout exp = row("Экспорт данных (JSON)", "");
         TextView exb = Ui.tv(this, "Экспорт", 14, Ui.ACCENT);
@@ -2055,7 +2113,7 @@ public class MainActivity extends Activity {
             .setNegativeButton("Отмена", null).show());
         body.addView(clear);
 
-        body.addView(row("Версия", "2.4"));
+        body.addView(row("Версия", "2.5"));
         body.addView(Ui.spacer(this, dp(20)));
         body.addView(Ui.tv(this, "© РыбинскLAB · rybinsklab.ru", 12, Ui.SUB));
 
@@ -2149,7 +2207,7 @@ public class MainActivity extends Activity {
         nm.setGravity(Gravity.CENTER);
         body.addView(nm);
         body.addView(Ui.spacer(this, dp(4)));
-        TextView ver = Ui.tv(this, "Версия 2.4", 13, Ui.SUB);
+        TextView ver = Ui.tv(this, "Версия 2.5", 13, Ui.SUB);
         ver.setGravity(Gravity.CENTER);
         body.addView(ver);
 
@@ -2717,6 +2775,217 @@ public class MainActivity extends Activity {
             .setNegativeButton("Отмена", null).show();
     }
 
+    // ================= TEMPLATE EDITOR =================
+    void pushTemplateEditor() {
+        LinearLayout col = Ui.col(this);
+        LinearLayout hb = Ui.row(this);
+        hb.setBackgroundColor(Ui.CARD);
+        hb.setPadding(dp(8), dp(8), dp(8), dp(8));
+        ImageView back = Ui.iconTouch(this, R.drawable.ic_back, 40, Ui.ACCENT);
+        back.setOnClickListener(v -> pop());
+        hb.addView(back);
+        TextView ti = Ui.tv(this, "Шаблоны", 18, Ui.TEXT, true);
+        ti.setPadding(dp(8), 0, 0, 0);
+        hb.addView(ti, Ui.weight(1));
+        ImageView add = Ui.iconTouch(this, R.drawable.ic_add, 40, Ui.ACCENT);
+        add.setOnClickListener(v -> editTemplate(null));
+        hb.addView(add);
+        col.addView(hb);
+
+        ScrollView sv = Ui.scroll(this);
+        LinearLayout body = Ui.col(this);
+        body.setPadding(dp(16), dp(12), dp(16), dp(20));
+        ArrayList<Store.Template> temps = store.loadTemplates();
+        if (temps.isEmpty()) {
+            TextView e = Ui.tv(this, "Шаблонов пока нет 🗂\nСоздайте шаблон кнопкой +", 15, Ui.SUB);
+            e.setGravity(Gravity.CENTER);
+            e.setPadding(dp(30), dp(80), dp(30), dp(40));
+            body.addView(e);
+        }
+        for (final Store.Template tp : temps) body.addView(templateRow(tp));
+        sv.addView(body);
+        col.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
+        push(col);
+    }
+
+    View templateRow(final Store.Template tp) {
+        LinearLayout r = Ui.row(this);
+        r.setPadding(dp(14), dp(12), dp(10), dp(12));
+        r.setBackground(Ui.bg(this, Ui.CARD, 14));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(10));
+        r.setLayoutParams(lp);
+        ImageView ic = Ui.icon(this, R.drawable.ic_template, 22, Ui.ACCENT);
+        r.addView(ic);
+        LinearLayout info = Ui.col(this);
+        info.setPadding(dp(12), 0, 0, 0);
+        info.addView(Ui.tv(this, tp.name, 16, Ui.TEXT, true));
+        info.addView(Ui.tv(this, templateSubCount(tp) + " подзадач", 12, Ui.SUB));
+        r.addView(info, Ui.weight(1));
+        ImageView del = Ui.iconTouch(this, R.drawable.ic_delete, 36, Ui.FAINT);
+        del.setOnClickListener(v -> new AlertDialog.Builder(this).setMessage("Удалить шаблон «" + tp.name + "»?")
+            .setPositiveButton("Удалить", (x, y) -> { store.deleteTemplate(tp.id); pop(); pop(); pushTemplateEditor(); })
+            .setNegativeButton("Отмена", null).show());
+        r.addView(del);
+        r.setOnClickListener(v -> editTemplate(tp));
+        return r;
+    }
+
+    int templateSubCount(Store.Template tp) {
+        try {
+            org.json.JSONArray a = new org.json.JSONObject(tp.json).optJSONArray("subs");
+            return a == null ? 0 : a.length();
+        } catch (Exception e) { return 0; }
+    }
+
+    void editTemplate(final Store.Template tp) {
+        final Store.Task w = tp == null ? new Store.Task() : taskFromTemplate(tp);
+        final Store.Template target = tp == null ? new Store.Template() : tp;
+
+        LinearLayout col = Ui.col(this);
+        LinearLayout hb = Ui.row(this);
+        hb.setBackgroundColor(Ui.CARD);
+        hb.setPadding(dp(8), dp(8), dp(8), dp(8));
+        ImageView cancel = Ui.iconTouch(this, R.drawable.ic_close, 40, Ui.SUB);
+        cancel.setOnClickListener(v -> pop());
+        hb.addView(cancel);
+        TextView save = Ui.tv(this, "Сохранить", 15, Color.WHITE, true);
+        save.setGravity(Gravity.CENTER);
+        save.setPadding(dp(16), dp(10), dp(16), dp(10));
+        save.setBackground(Ui.bg(this, Ui.ACCENT, 10));
+        hb.addView(save);
+        col.addView(hb);
+
+        ScrollView sv = Ui.scroll(this);
+        LinearLayout body = Ui.col(this);
+        body.setPadding(dp(20), dp(8), dp(20), dp(30));
+
+        final EditText titleIn = Ui.et(this, "Название шаблона", 20);
+        titleIn.setText(w.title);
+        titleIn.setTypeface(Typeface.DEFAULT_BOLD);
+        body.addView(titleIn);
+
+        final TextView[] prioVal = new TextView[1];
+        LinearLayout prioRow = Ui.row(this);
+        prioRow.setPadding(dp(0), dp(12), dp(0), dp(12));
+        ImageView prioIcon = Ui.icon(this, R.drawable.ic_flag, 20, Ui.ACCENT);
+        LinearLayout.LayoutParams piclp = new LinearLayout.LayoutParams(dp(36), dp(36));
+        prioIcon.setLayoutParams(piclp);
+        prioIcon.setScaleType(ImageView.ScaleType.CENTER);
+        prioRow.addView(prioIcon);
+        prioRow.addView(Ui.tv(this, "Приоритет", 15, Ui.TEXT), Ui.weight(1));
+        prioVal[0] = Ui.tv(this, prioLabelOf(w.priority), 14, Ui.SUB);
+        prioRow.addView(prioVal[0]);
+        prioRow.setOnClickListener(v -> {
+            final String[] labels = {"Без приоритета", "Низкий", "Средний", "Высокий"};
+            final int[] vals = {0, 1, 2, 3};
+            new AlertDialog.Builder(this).setTitle("Приоритет").setItems(labels, (d, i) -> {
+                w.priority = vals[i];
+                prioVal[0].setText(prioLabelOf(w.priority));
+            }).show();
+        });
+        body.addView(prioRow);
+
+        body.addView(Ui.spacer(this, dp(8)));
+        final EditText notesIn = Ui.et(this, "Заметки", 15);
+        notesIn.setText(w.notes);
+        notesIn.setSingleLine(false);
+        notesIn.setMinLines(2);
+        body.addView(notesIn);
+
+        body.addView(Ui.spacer(this, dp(16)));
+        body.addView(Ui.tv(this, "Подзадачи", 14, Ui.TEXT, true));
+        final LinearLayout subsBox = Ui.col(this);
+        body.addView(subsBox);
+        renderTemplateSubs(subsBox, w);
+
+        LinearLayout addSub = Ui.row(this);
+        addSub.setPadding(0, dp(8), 0, dp(8));
+        ImageView addSubIcon = Ui.icon(this, R.drawable.ic_add, 16, Ui.ACCENT);
+        addSub.addView(addSubIcon);
+        TextView addSubText = Ui.tv(this, "Добавить подзадачу", 14, Ui.ACCENT);
+        addSubText.setPadding(dp(6), 0, 0, 0);
+        addSub.addView(addSubText);
+        addSub.setOnClickListener(v -> {
+            final EditText inp = Ui.et(this, "Подзадача", 15);
+            LinearLayout box = Ui.col(this);
+            box.setPadding(dp(24), dp(8), dp(24), 0);
+            box.addView(inp);
+            new AlertDialog.Builder(this).setTitle("Подзадача").setView(box)
+                .setPositiveButton("Добавить", (d, ww) -> {
+                    String s = inp.getText().toString().trim();
+                    if (s.length() > 0) { Store.Task sub = new Store.Task(); sub.title = s; w.subs.add(sub); renderTemplateSubs(subsBox, w); }
+                }).setNegativeButton("Отмена", null).show();
+        });
+        body.addView(addSub);
+
+        if (tp != null) {
+            TextView del = Ui.tv(this, "Удалить шаблон", 15, Ui.RED, true);
+            del.setGravity(Gravity.CENTER);
+            del.setPadding(0, dp(16), 0, dp(16));
+            del.setOnClickListener(v -> { store.deleteTemplate(tp.id); pop(); pop(); pushTemplateEditor(); });
+            body.addView(del);
+        }
+
+        sv.addView(body);
+        col.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
+        push(col);
+
+        save.setOnClickListener(v -> {
+            String title = titleIn.getText().toString().trim();
+            if (title.length() == 0) { toast("Введите название"); return; }
+            target.name = title;
+            try {
+                org.json.JSONObject o = new org.json.JSONObject();
+                o.put("title", title);
+                o.put("notes", notesIn.getText().toString().trim());
+                o.put("priority", w.priority);
+                org.json.JSONArray arr = new org.json.JSONArray();
+                for (Store.Task s : w.subs) { org.json.JSONObject so = new org.json.JSONObject(); so.put("title", s.title); arr.put(so); }
+                o.put("subs", arr);
+                target.json = o.toString();
+                store.saveTemplate(target);
+                toast("Сохранено");
+                pop(); pop(); pushTemplateEditor();
+            } catch (Exception e) { toast("Ошибка"); }
+        });
+    }
+
+    void renderTemplateSubs(LinearLayout subsBox, Store.Task w) {
+        subsBox.removeAllViews();
+        for (int i = 0; i < w.subs.size(); i++) {
+            final Store.Task s = w.subs.get(i);
+            LinearLayout sr = Ui.row(this);
+            sr.setPadding(0, dp(7), 0, dp(7));
+            TextView num = Ui.tv(this, (i + 1) + ".", 15, Ui.SUB);
+            sr.addView(num);
+            TextView ch = Ui.tv(this, s.done == 1 ? "✓" : "", 12, Color.WHITE, true);
+            ch.setGravity(Gravity.CENTER);
+            int cs = dp(26);
+            ch.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
+            ch.setBackground(s.done == 1 ? Ui.oval(Ui.ACCENT) : Ui.ring(this, Ui.BORDER, 1));
+            ch.setOnClickListener(v -> { s.done = s.done == 1 ? 0 : 1; renderTemplateSubs(subsBox, w); });
+            sr.addView(ch);
+            TextView sn = Ui.tv(this, s.title, 15, s.done == 1 ? Ui.SUB : Ui.TEXT);
+            if (s.done == 1) sn.setPaintFlags(sn.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
+            sn.setPadding(dp(10), 0, 0, 0);
+            sr.addView(sn, Ui.weight(1));
+            ImageView rm = Ui.iconTouch(this, R.drawable.ic_close, 36, Ui.FAINT);
+            rm.setOnClickListener(v -> { w.subs.remove(s); renderTemplateSubs(subsBox, w); });
+            sr.addView(rm);
+            subsBox.addView(sr);
+        }
+    }
+
+    String prioLabelOf(int p) {
+        switch (p) {
+            case 1: return "Низкий";
+            case 2: return "Средний";
+            case 3: return "Высокий";
+            default: return "Без приоритета";
+        }
+    }
+
     void saveEditor() {
         String title = edTitleInput.getText().toString().trim();
         if (title.length() == 0) { toast("Введите название"); return; }
@@ -2740,6 +3009,7 @@ public class MainActivity extends Activity {
         while (!stack.isEmpty()) pop();
         showTab(tab);
         toast("Сохранено");
+        maybeSync();
     }
 
     void toast(String m) { Toast.makeText(this, m, Toast.LENGTH_SHORT).show(); }
