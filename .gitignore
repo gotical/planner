@@ -1,0 +1,22 @@
+# build artifacts
+build/
+*.apk
+*.aab
+*.idsig
+
+# signing / secrets
+*.jks
+*.keystore
+*.p12
+keystore.properties
+
+# gradle / ide
+.gradle/
+.idea/
+*.iml
+local.properties
+.termux/
+
+# os
+.DS_Store
+Thumbs.db
