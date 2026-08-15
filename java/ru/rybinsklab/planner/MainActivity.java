@@ -191,7 +191,7 @@ public class MainActivity extends Activity {
         col.addView(drawerItem(R.drawable.ic_done_all, "Завершённые", "completed", null));
         col.addView(drawerItem(R.drawable.ic_block, "Пропущенные", "skipped", null));
         col.addView(drawerItem(R.drawable.ic_delete, "Корзина", "trash", null));
-        col.addView(drawerItem(R.drawable.ic_favorite, "Хочу", "wish", null));
+        col.addView(drawerItem(R.drawable.ic_favorite, "Желания", "wish", null));
 
         Ui.divider(col, this, dp(20));
 
@@ -527,7 +527,7 @@ public class MainActivity extends Activity {
             case "completed": return "Завершённые";
             case "skipped": return "Пропущенные";
             case "trash": return "Корзина";
-            case "wish": return "Хочу";
+            case "wish": return "Желания";
             case "inbox": return "Входящие";
             default:
                 if (view.startsWith("list:")) {
@@ -717,6 +717,7 @@ public class MainActivity extends Activity {
 
     String repeatLabel(String r) {
         if (r != null && r.startsWith("dow:")) return dowLabel(r);
+        if (r != null && r.startsWith("dates:")) return datesLabel(r);
         switch (r) {
             case "daily": return "ежедневно";
             case "weekly": return "еженедельно";
@@ -735,6 +736,18 @@ public class MainActivity extends Activity {
             try { int d = Integer.parseInt(p.trim()); if (d >= 1 && d <= 7) { if (s.length() > 0) s.append(", "); s.append(names[d]); } } catch (Exception ignored) { }
         }
         return s.length() > 0 ? s.toString() : "по дням недели";
+    }
+
+    String datesLabel(String r) {
+        StringBuilder s = new StringBuilder();
+        for (String p : r.substring(6).split(",")) {
+            String[] md = p.split("-");
+            if (md.length == 2) {
+                if (s.length() > 0) s.append(", ");
+                s.append(md[1]).append(".").append(md[0]);
+            }
+        }
+        return s.length() > 0 ? s.toString() : "в выбранные даты";
     }
 
     String fmtTime(String hhmm) {
@@ -797,15 +810,28 @@ public class MainActivity extends Activity {
             }
             c.add(Calendar.WEEK_OF_YEAR, 1);
         }
+        else if (repeat != null && repeat.startsWith("dates:")) {
+            java.util.Set<String> dates = new java.util.HashSet<>();
+            for (String p : repeat.substring(6).split(",")) dates.add(p.trim());
+            if (!dates.isEmpty()) {
+                for (int add = 1; add <= 366; add++) {
+                    Calendar n = (Calendar) c.clone();
+                    n.add(Calendar.DAY_OF_MONTH, add);
+                    String key = (n.get(Calendar.MONTH) + 1) + "-" + n.get(Calendar.DAY_OF_MONTH);
+                    if (dates.contains(key)) return n.getTimeInMillis();
+                }
+            }
+            c.add(Calendar.YEAR, 1);
+        }
         return c.getTimeInMillis();
     }
 
     void rebuildTasks() { if (tab == 0 && stack.isEmpty()) tasksScreen(); }
 
-    // ================= WISHLIST (Хочу) =================
+    // ================= WISHLIST (Желания) =================
     void wishScreen() {
         LinearLayout col = Ui.col(this);
-        col.addView(topBar("Хочу", true, R.drawable.ic_add, this::addWishDialog, null));
+        col.addView(topBar("Желания", true, R.drawable.ic_add, this::addWishDialog, null));
         ScrollView sv = Ui.scroll(this);
         LinearLayout list = Ui.col(this);
         list.setPadding(dp(16), dp(12), dp(16), dp(20));
@@ -883,7 +909,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(24), dp(8), dp(24), 0);
         box.addView(input);
         box.addView(priceIn);
-        new AlertDialog.Builder(this).setTitle("Новая вещь в «Хочу»").setView(box)
+        new AlertDialog.Builder(this).setTitle("Новая вещь в «Желания»").setView(box)
             .setPositiveButton("Добавить", (d, w) -> {
                 String raw = input.getText().toString().trim();
                 if (raw.length() == 0) return;
@@ -2264,20 +2290,137 @@ public class MainActivity extends Activity {
     }
 
     void pickRepeat() {
-        final String[] labels = {"Не повторять", "Ежедневно", "Еженедельно", "Раз в 2 недели", "Раз в 3 недели", "По дням недели…", "Ежемесячно", "Ежегодно"};
-        new AlertDialog.Builder(this).setTitle("Повтор").setItems(labels, (d, w) -> {
-            switch (w) {
-                case 0: ed.repeat = ""; break;
-                case 1: ed.repeat = "daily"; break;
-                case 2: ed.repeat = "weekly"; break;
-                case 3: ed.repeat = "weekly2"; break;
-                case 4: ed.repeat = "weekly3"; break;
-                case 5: pickDays(); return;
-                case 6: ed.repeat = "monthly"; break;
-                case 7: ed.repeat = "yearly"; break;
+        final AlertDialog[] holder = new AlertDialog[1];
+        LinearLayout list = Ui.col(this);
+        list.setPadding(0, dp(8), 0, dp(8));
+        addRepeatRow(list, holder, "Не повторять", () -> { ed.repeat = ""; buildEditor(); });
+        addRepeatRow(list, holder, "Ежедневно", () -> { ed.repeat = "daily"; buildEditor(); });
+        // еженедельно: тап = weekly, долгое нажатие = интервал
+        LinearLayout wr = Ui.row(this);
+        wr.setPadding(dp(20), dp(14), dp(20), dp(14));
+        wr.addView(Ui.tv(this, "Еженедельно", 16, Ui.TEXT), Ui.weight(1));
+        TextView hint = Ui.tv(this, "⋯", 18, Ui.SUB);
+        wr.addView(hint);
+        wr.setOnClickListener(v -> { if (holder[0] != null) holder[0].dismiss(); ed.repeat = "weekly"; buildEditor(); });
+        wr.setOnLongClickListener(v -> { if (holder[0] != null) holder[0].dismiss(); pickWeeklyInterval(); return true; });
+        list.addView(wr);
+        addRepeatRow(list, holder, "По дням недели…", () -> pickDays());
+        addRepeatRow(list, holder, "Выбрать даты…", () -> pickDates());
+        addRepeatRow(list, holder, "Ежемесячно", () -> { ed.repeat = "monthly"; buildEditor(); });
+        addRepeatRow(list, holder, "Ежегодно", () -> { ed.repeat = "yearly"; buildEditor(); });
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle("Повтор").setView(list).create();
+        holder[0] = dlg;
+        dlg.show();
+    }
+
+    void addRepeatRow(LinearLayout list, final AlertDialog[] holder, String label, final Runnable action) {
+        LinearLayout r = Ui.row(this);
+        r.setPadding(dp(20), dp(14), dp(20), dp(14));
+        r.addView(Ui.tv(this, label, 16, Ui.TEXT), Ui.weight(1));
+        r.setOnClickListener(v -> { if (holder[0] != null) holder[0].dismiss(); action.run(); });
+        list.addView(r);
+    }
+
+    void pickWeeklyInterval() {
+        new AlertDialog.Builder(this).setTitle("Интервал недели")
+            .setItems(new String[]{"Еженедельно", "Раз в 2 недели", "Раз в 3 недели"}, (d, w) -> {
+                ed.repeat = w == 0 ? "weekly" : (w == 1 ? "weekly2" : "weekly3");
+                buildEditor();
+            }).show();
+    }
+
+    void pickDates() {
+        final java.util.Set<String> sel = new java.util.HashSet<>();
+        if (ed.repeat != null && ed.repeat.startsWith("dates:")) {
+            for (String p : ed.repeat.substring(6).split(",")) sel.add(p.trim());
+        }
+        final int[] ym = {Calendar.getInstance().get(Calendar.YEAR), Calendar.getInstance().get(Calendar.MONTH)};
+        final LinearLayout box = Ui.col(this);
+        box.setPadding(dp(8), dp(8), dp(8), dp(8));
+        final LinearLayout grid = Ui.col(this);
+        final TextView title = Ui.tv(this, "", 16, Ui.TEXT, true);
+
+        LinearLayout hdr = Ui.row(this);
+        TextView prev = Ui.tv(this, "‹", 30, Ui.ACCENT);
+        prev.setPadding(dp(14), 0, dp(4), 0);
+        prev.setOnClickListener(v -> { if (ym[1] == 0) { ym[1] = 11; ym[0]--; } else ym[1]--; renderDatePickerGrid(grid, title, sel, ym); });
+        hdr.addView(prev);
+        title.setGravity(Gravity.CENTER);
+        hdr.addView(title, Ui.weight(1));
+        TextView next = Ui.tv(this, "›", 30, Ui.ACCENT);
+        next.setPadding(dp(4), 0, dp(14), 0);
+        next.setOnClickListener(v -> { if (ym[1] == 11) { ym[1] = 0; ym[0]++; } else ym[1]++; renderDatePickerGrid(grid, title, sel, ym); });
+        hdr.addView(next);
+        box.addView(hdr);
+
+        box.addView(grid);
+        renderDatePickerGrid(grid, title, sel, ym);
+
+        new AlertDialog.Builder(this).setTitle("Повтор в выбранные даты").setView(box)
+            .setPositiveButton("Готово", (d, w) -> {
+                if (sel.isEmpty()) { ed.repeat = "weekly"; }
+                else {
+                    java.util.List<String> sorted = new java.util.ArrayList<>(sel);
+                    java.util.Collections.sort(sorted, (a, b) -> compareMd(a, b));
+                    StringBuilder sb = new StringBuilder("dates:");
+                    boolean first = true;
+                    for (String s : sorted) { if (!first) sb.append(','); sb.append(s); first = false; }
+                    ed.repeat = sb.toString();
+                }
+                buildEditor();
+            })
+            .setNegativeButton("Отмена", null).show();
+    }
+
+    int compareMd(String a, String b) {
+        String[] pa = a.split("-"), pb = b.split("-");
+        int ma = Integer.parseInt(pa[0]), mb = Integer.parseInt(pb[0]);
+        if (ma != mb) return ma - mb;
+        return Integer.parseInt(pa[1]) - Integer.parseInt(pb[1]);
+    }
+
+    void renderDatePickerGrid(LinearLayout grid, TextView title, java.util.Set<String> sel, int[] ym) {
+        grid.removeAllViews();
+        String[] mo = {"Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"};
+        title.setText(mo[ym[1]] + " " + ym[0]);
+
+        String[] wd = {"ПН","ВТ","СР","ЧТ","ПТ","СБ","ВС"};
+        LinearLayout heads = Ui.row(this);
+        for (String w : wd) { TextView x = Ui.tv(this, w, 11, Ui.SUB, true); x.setGravity(Gravity.CENTER); heads.addView(x, Ui.weight(1)); }
+        grid.addView(heads);
+        grid.addView(Ui.spacer(this, dp(4)));
+
+        Calendar c = Calendar.getInstance();
+        c.set(ym[0], ym[1], 1);
+        int offset = (c.get(Calendar.DAY_OF_WEEK) + 5) % 7;
+        int max = c.getActualMaximum(Calendar.DAY_OF_MONTH);
+        int day = 1;
+        for (int week = 0; week < 6 && day <= max; week++) {
+            LinearLayout line = Ui.row(this);
+            for (int j = 0; j < 7; j++) {
+                boolean inRange = !(week == 0 && j < offset) && day <= max;
+                if (inRange) {
+                    final int d = day;
+                    final String key = (ym[1] + 1) + "-" + d;
+                    boolean selected = sel.contains(key);
+                    TextView cell = Ui.tv(this, String.valueOf(d), 14, selected ? Color.WHITE : Ui.TEXT, selected);
+                    cell.setGravity(Gravity.CENTER);
+                    int s = dp(38);
+                    cell.setLayoutParams(new LinearLayout.LayoutParams(s, s));
+                    cell.setBackground(selected ? Ui.oval(Ui.ACCENT) : Ui.stroke(this, Color.TRANSPARENT, 1, 20));
+                    cell.setOnClickListener(v -> {
+                        if (sel.contains(key)) sel.remove(key); else sel.add(key);
+                        renderDatePickerGrid(grid, title, sel, ym);
+                    });
+                    line.addView(cell, Ui.weight(1));
+                    day++;
+                } else {
+                    TextView blank = Ui.tv(this, "", 14, Ui.TEXT);
+                    line.addView(blank, Ui.weight(1));
+                }
             }
-            buildEditor();
-        }).show();
+            grid.addView(line);
+        }
     }
 
     void pickDays() {
