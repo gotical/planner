@@ -1197,7 +1197,8 @@ public class MainActivity extends Activity {
             if (t.title.isEmpty()) return;
             SharedPreferences p = getSharedPreferences("planner", 0);
             t.listId = p.getLong("default_list", 0);
-            if ("today".equals(view)) t.due = Store.todayStart();
+            if (tab == 1) t.due = calendarSelectedDay();
+            else if ("today".equals(view)) t.due = Store.todayStart();
             else if ("tomorrow".equals(view)) t.due = Store.addDays(Store.todayStart(), 1);
             if (view.startsWith("list:")) t.listId = Long.parseLong(view.substring(5));
             store.saveTask(t);
@@ -1268,6 +1269,7 @@ public class MainActivity extends Activity {
             if (low.contains("послезавтра")) { due = Store.addDays(today, 2); }
             else if (low.contains("завтра")) { due = Store.addDays(today, 1); }
             else if (low.contains("сегодня")) { due = today; }
+            else if (tab == 1) { due = calendarSelectedDay(); }
             else if ("today".equals(view)) { due = today; }
             else if ("tomorrow".equals(view)) { due = Store.addDays(today, 1); }
         }
@@ -2185,10 +2187,21 @@ public class MainActivity extends Activity {
         edRemOffsets = new ArrayList<>();
         SharedPreferences p = getSharedPreferences("planner", 0);
         ed.listId = p.getLong("default_list", 0);
-        if ("today".equals(view)) ed.due = Store.todayStart();
+        if (tab == 1) ed.due = calendarSelectedDay();
+        else if ("today".equals(view)) ed.due = Store.todayStart();
         else if ("tomorrow".equals(view)) ed.due = Store.addDays(Store.todayStart(), 1);
         if (view.startsWith("list:")) ed.listId = Long.parseLong(view.substring(5));
         buildEditor();
+    }
+
+    long calendarSelectedDay() {
+        Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(calSel.getTimeInMillis());
+        c.set(Calendar.HOUR_OF_DAY, 0);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 0);
+        c.set(Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
     }
 
     void openEditor(Store.Task t) {
