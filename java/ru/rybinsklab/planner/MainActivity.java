@@ -625,6 +625,9 @@ public class MainActivity extends Activity {
                 list.addView(hd);
             }
             list.addView(taskRow(t));
+            for (int si = 0; si < t.subs.size(); si++) {
+                list.addView(subtaskRow(t, t.subs.get(si), si));
+            }
         }
         if (shown.isEmpty()) {
             TextView e = Ui.tv(this, emptyText(), 16, Ui.SUB);
@@ -693,6 +696,25 @@ public class MainActivity extends Activity {
         acts.add(new Action(R.drawable.ic_undo, "Восстановить", () -> { store.restoreTask(t); reload(); rebuildTasks(); toast("Восстановлено"); }));
         acts.add(new Action(R.drawable.ic_delete, "Удалить навсегда", () -> { store.hardDelete(t); reload(); rebuildTasks(); }));
         actionSheet(t.title, acts);
+    }
+
+    View subtaskRow(final Store.Task parent, final Store.Task s, int index) {
+        LinearLayout r = Ui.row(this);
+        r.setPadding(dp(30), dp(5), dp(16), dp(5));
+        TextView num = Ui.tv(this, (index + 1) + ".", 13, Ui.FAINT);
+        r.addView(num);
+        TextView ch = Ui.tv(this, s.done == 1 ? "✓" : "", 11, Color.WHITE, true);
+        ch.setGravity(Gravity.CENTER);
+        int cs = dp(22);
+        ch.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
+        ch.setBackground(s.done == 1 ? Ui.oval(Ui.ACCENT) : Ui.ring(this, Ui.BORDER, 1));
+        ch.setOnClickListener(v -> { s.done = s.done == 1 ? 0 : 1; store.saveTask(s); reload(); rebuildTasks(); });
+        r.addView(ch);
+        TextView sn = Ui.tv(this, s.title, 14, s.done == 1 ? Ui.SUB : Ui.TEXT);
+        if (s.done == 1) sn.setPaintFlags(sn.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
+        sn.setPadding(dp(10), 0, 0, 0);
+        r.addView(sn, Ui.weight(1));
+        return r;
     }
 
     String metaText(Store.Task t) {
@@ -765,6 +787,9 @@ public class MainActivity extends Activity {
 
     void completeTask(Store.Task t, boolean done) {
         if (!done) { store.setDone(t, false); reload(); rebuildTasks(); return; }
+        for (Store.Task s : t.subs) {
+            if (s.done != 1) { toast("Сначала выполните подзадачи"); return; }
+        }
         store.setDone(t, true);
         if (t.repeat.length() > 0 && t.due > 0) {
             // create next occurrence
@@ -1125,7 +1150,17 @@ public class MainActivity extends Activity {
         LinearLayout box = Ui.col(this);
         box.setPadding(dp(24), dp(8), dp(24), 0);
         box.addView(input);
-        new AlertDialog.Builder(this).setTitle("Новая задача").setView(box)
+        final AlertDialog[] holder = new AlertDialog[1];
+        LinearLayout tpl = Ui.row(this);
+        tpl.setPadding(0, dp(8), 0, 0);
+        ImageView tplIcon = Ui.icon(this, R.drawable.ic_add, 16, Ui.ACCENT);
+        tpl.addView(tplIcon);
+        TextView tplText = Ui.tv(this, "Выбрать из шаблонов", 13, Ui.ACCENT);
+        tplText.setPadding(dp(6), 0, 0, 0);
+        tpl.addView(tplText);
+        tpl.setOnClickListener(v -> { if (holder[0] != null) holder[0].dismiss(); quickPickTemplate(); });
+        box.addView(tpl);
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle("Новая задача").setView(box)
             .setPositiveButton("Добавить", (d, w) -> {
                 String s = input.getText().toString().trim();
                 if (s.length() == 0) return;
@@ -1135,8 +1170,48 @@ public class MainActivity extends Activity {
                 rebuildTasks();
                 if (t.reminder > 0) Reminders.schedule(this, t);
             })
-            .setNegativeButton("Отмена", null).show();
+            .setNegativeButton("Отмена", null).create();
+        holder[0] = dlg;
+        dlg.show();
         input.requestFocus();
+    }
+
+    void quickPickTemplate() {
+        ArrayList<Store.Template> temps = store.loadTemplates();
+        if (temps.isEmpty()) { toast("Нет шаблонов. Сохраните задачу как шаблон."); return; }
+        String[] names = new String[temps.size()];
+        for (int i = 0; i < temps.size(); i++) names[i] = temps.get(i).name;
+        new AlertDialog.Builder(this).setTitle("Шаблоны").setItems(names, (d, w) -> {
+            Store.Task t = taskFromTemplate(temps.get(w));
+            if (t.title.isEmpty()) return;
+            SharedPreferences p = getSharedPreferences("planner", 0);
+            t.listId = p.getLong("default_list", 0);
+            if ("today".equals(view)) t.due = Store.todayStart();
+            else if ("tomorrow".equals(view)) t.due = Store.addDays(Store.todayStart(), 1);
+            if (view.startsWith("list:")) t.listId = Long.parseLong(view.substring(5));
+            store.saveTask(t);
+            for (Store.Task s : t.subs) { s.parent = t; store.saveTask(s); }
+            reload();
+            rebuildTasks();
+            toast("Добавлено из шаблона");
+        }).show();
+    }
+
+    Store.Task taskFromTemplate(Store.Template tpl) {
+        Store.Task t = new Store.Task();
+        try {
+            org.json.JSONObject o = new org.json.JSONObject(tpl.json);
+            t.title = o.optString("title", "");
+            t.notes = o.optString("notes", "");
+            t.priority = o.optInt("priority", 0);
+            org.json.JSONArray subs = o.optJSONArray("subs");
+            if (subs != null) for (int i = 0; i < subs.length(); i++) {
+                Store.Task s = new Store.Task();
+                s.title = subs.getJSONObject(i).optString("title", "");
+                t.subs.add(s);
+            }
+        } catch (Exception ignored) { }
+        return t;
     }
 
     Store.Task parseQuick(String raw) {
@@ -2166,12 +2241,21 @@ public class MainActivity extends Activity {
         // subtasks
         body.addView(Ui.spacer(this, dp(16)));
         body.addView(Ui.tv(this, "Подзадачи", 14, Ui.TEXT, true));
-        for (final Store.Task s : ed.subs) {
+        for (int i = 0; i < ed.subs.size(); i++) {
+            final Store.Task s = ed.subs.get(i);
             LinearLayout sr = Ui.row(this);
-            TextView ch = Ui.tv(this, "○", 20, Ui.SUB);
+            sr.setPadding(0, dp(7), 0, dp(7));
+            TextView num = Ui.tv(this, (i + 1) + ".", 15, Ui.SUB);
+            sr.addView(num);
+            TextView ch = Ui.tv(this, s.done == 1 ? "✓" : "", 12, Color.WHITE, true);
+            ch.setGravity(Gravity.CENTER);
+            int cs = dp(26);
+            ch.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
+            ch.setBackground(s.done == 1 ? Ui.oval(Ui.ACCENT) : Ui.ring(this, Ui.BORDER, 1));
             ch.setOnClickListener(v -> { s.done = s.done == 1 ? 0 : 1; buildEditor(); });
             sr.addView(ch);
-            TextView sn = Ui.tv(this, s.title, 15, Ui.TEXT);
+            TextView sn = Ui.tv(this, s.title, 15, s.done == 1 ? Ui.SUB : Ui.TEXT);
+            if (s.done == 1) sn.setPaintFlags(sn.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
             sn.setPadding(dp(10), 0, 0, 0);
             sr.addView(sn, Ui.weight(1));
             ImageView rm = Ui.iconTouch(this, R.drawable.ic_close, 36, Ui.FAINT);
@@ -2179,8 +2263,13 @@ public class MainActivity extends Activity {
             sr.addView(rm);
             body.addView(sr);
         }
-        TextView addSub = Ui.tv(this, "+  Добавить подзадачу", 14, Ui.ACCENT);
-        addSub.setPadding(0, dp(6), 0, dp(6));
+        LinearLayout addSub = Ui.row(this);
+        addSub.setPadding(0, dp(8), 0, dp(8));
+        ImageView addSubIcon = Ui.icon(this, R.drawable.ic_add, 16, Ui.ACCENT);
+        addSub.addView(addSubIcon);
+        TextView addSubText = Ui.tv(this, "Добавить подзадачу", 14, Ui.ACCENT);
+        addSubText.setPadding(dp(6), 0, 0, 0);
+        addSub.addView(addSubText);
         addSub.setOnClickListener(v -> {
             final EditText inp = Ui.et(this, "Подзадача", 15);
             LinearLayout box = Ui.col(this);
@@ -2569,20 +2658,13 @@ public class MainActivity extends Activity {
     }
 
     void applyTemplate(Store.Template tpl) {
-        try {
-            org.json.JSONObject o = new org.json.JSONObject(tpl.json);
-            ed.title = o.optString("title", ed.title);
-            ed.notes = o.optString("notes", ed.notes);
-            ed.priority = o.optInt("priority", ed.priority);
-            ed.subs.clear();
-            org.json.JSONArray subs = o.optJSONArray("subs");
-            if (subs != null) for (int i = 0; i < subs.length(); i++) {
-                Store.Task s = new Store.Task();
-                s.title = subs.getJSONObject(i).optString("title", "");
-                ed.subs.add(s);
-            }
-            buildEditor();
-        } catch (Exception e) { toast("Ошибка шаблона"); }
+        Store.Task nt = taskFromTemplate(tpl);
+        ed.title = nt.title;
+        ed.notes = nt.notes;
+        ed.priority = nt.priority;
+        ed.subs.clear();
+        ed.subs.addAll(nt.subs);
+        buildEditor();
     }
 
     void saveAsTemplate(Store.Task t) {
