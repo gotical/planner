@@ -719,12 +719,12 @@ public class MainActivity extends Activity {
         if (r != null && r.startsWith("dow:")) return dowLabel(r);
         if (r != null && r.startsWith("dates:")) return datesLabel(r);
         switch (r) {
-            case "daily": return "ежедневно";
-            case "weekly": return "еженедельно";
-            case "weekly2": return "раз в 2 недели";
-            case "weekly3": return "раз в 3 недели";
-            case "monthly": return "ежемесячно";
-            case "yearly": return "ежегодно";
+            case "daily": return "Ежедневно";
+            case "weekly": return "Еженедельно";
+            case "weekly2": return "Раз в 2 недели";
+            case "weekly3": return "Раз в 3 недели";
+            case "monthly": return "Ежемесячно";
+            case "yearly": return "Ежегодно";
             default: return r;
         }
     }
@@ -1074,7 +1074,8 @@ public class MainActivity extends Activity {
         if (t.notes.length() > 0) { body.addView(Ui.spacer(this, dp(8))); body.addView(Ui.tv(this, t.notes, 15, Ui.SUB)); }
         body.addView(Ui.spacer(this, dp(12)));
         body.addView(detailRow("Список", t.listId == 0 ? "Входящие" : listName(t.listId)));
-        if (t.due > 0) body.addView(detailRow("Дата", Store.fullDate(t.due) + (t.hasTime == 1 ? " " + t.time : "")));
+        if (t.due > 0) body.addView(detailRow("Дата", Store.fullDate(t.due)));
+        if (t.hasTime == 1 && t.time.length() > 0) body.addView(detailRow("Время", fmtTime(t.time)));
         if (t.repeat.length() > 0) body.addView(detailRow("Повтор", repeatLabel(t.repeat)));
         if (t.priority > 0) body.addView(detailRow("Приоритет", t.priority == 3 ? "Высокий" : (t.priority == 2 ? "Средний" : "Низкий")));
         if (t.subs.size() > 0) {
@@ -2135,6 +2136,16 @@ public class MainActivity extends Activity {
         edTitleInput.setTypeface(Typeface.DEFAULT_BOLD);
         body.addView(edTitleInput);
 
+        // template shortcut below title
+        LinearLayout tpl = Ui.row(this);
+        ImageView tplIcon = Ui.icon(this, R.drawable.ic_add, 16, Ui.ACCENT);
+        tpl.addView(tplIcon);
+        TextView tplText = Ui.tv(this, "Выбрать из шаблонов", 13, Ui.ACCENT);
+        tplText.setPadding(dp(6), 0, 0, 0);
+        tpl.addView(tplText);
+        tpl.setOnClickListener(v -> pickTemplate());
+        body.addView(tpl);
+
         // date row
         body.addView(editorRow(R.drawable.ic_event, "Дата", ed.due > 0 ? dateLabel() : "Сегодня / Завтра / Выбрать", () -> pickDate()));
         if (ed.hasTime == 1) body.addView(editorRow(R.drawable.ic_schedule, "Время", ed.time, this::pickTime));
@@ -2143,7 +2154,6 @@ public class MainActivity extends Activity {
         body.addView(editorRow(R.drawable.ic_flag, "Приоритет", prioLabel(), this::pickPriority));
         body.addView(editorRow(R.drawable.ic_list, "Список", listName(ed.listId), this::pickList));
         body.addView(editorRow(R.drawable.ic_tag, "Теги", tagLabel(), this::pickTags));
-        body.addView(editorRow(R.drawable.ic_template, "Шаблон", "Применить шаблон", this::pickTemplate));
 
         // notes
         body.addView(Ui.spacer(this, dp(10)));
