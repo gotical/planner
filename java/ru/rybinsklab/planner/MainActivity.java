@@ -16,6 +16,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.speech.RecognizerIntent;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -71,6 +72,8 @@ public class MainActivity extends Activity {
     }
 
     static final int REQ_CALENDAR = 8001;
+    static final int REQ_VOICE = 8002;
+    EditText voiceTarget;
 
     void maybeSync() {
         SharedPreferences p = getSharedPreferences("planner", 0);
@@ -1188,9 +1191,12 @@ public class MainActivity extends Activity {
 
     void quickAdd() {
         final EditText input = Ui.et(this, "Например: позвонить маме завтра в 18:00", 16);
+        LinearLayout inputRow = Ui.row(this);
+        inputRow.addView(input, Ui.weight(1));
+        inputRow.addView(micButton(input, Ui.ACCENT));
         LinearLayout box = Ui.col(this);
         box.setPadding(dp(24), dp(8), dp(24), 0);
-        box.addView(input);
+        box.addView(inputRow);
         final AlertDialog[] holder = new AlertDialog[1];
         LinearLayout tpl = Ui.row(this);
         tpl.setPadding(0, dp(8), 0, 0);
@@ -1716,6 +1722,22 @@ public class MainActivity extends Activity {
         top.addView(del);
         card.addView(top);
 
+        if (h.notes != null && h.notes.length() > 0) {
+            TextView note = Ui.tv(this, "💬 " + h.notes, 13, Ui.SUB);
+            note.setPadding(dp(20), dp(4), 0, 0);
+            card.addView(note);
+        }
+
+        LinearLayout editHint = Ui.row(this);
+        editHint.setPadding(dp(20), dp(6), 0, 0);
+        ImageView edIcon = Ui.icon(this, R.drawable.ic_edit, 14, Ui.SUB);
+        editHint.addView(edIcon);
+        TextView edText = Ui.tv(this, "Изменить / комментарий", 12, Ui.SUB);
+        edText.setPadding(dp(6), 0, 0, 0);
+        editHint.addView(edText);
+        editHint.setOnClickListener(v -> editHabit(h));
+        card.addView(editHint);
+
         // last 7 days
         LinearLayout week = Ui.row(this);
         week.setPadding(0, dp(12), 0, 0);
@@ -1781,6 +1803,33 @@ public class MainActivity extends Activity {
             wrap.setOnClickListener(v -> { chosen[0] = c; renderColorPicker(row, chosen); });
             row.addView(wrap);
         }
+    }
+
+    void editHabit(final Store.Habit h) {
+        final EditText input = Ui.et(this, "Название привычки", 16);
+        input.setText(h.name);
+        final EditText notes = Ui.et(this, "Комментарий (необязательно)", 15);
+        notes.setText(h.notes == null ? "" : h.notes);
+        notes.setSingleLine(false);
+        notes.setMinLines(2);
+        LinearLayout box = Ui.col(this);
+        box.setPadding(dp(24), dp(8), dp(24), 0);
+        box.addView(input);
+        box.addView(notes);
+        final int[] chosen = {h.color};
+        box.addView(colorPicker(chosen));
+        new AlertDialog.Builder(this).setTitle("Изменить привычку").setView(box)
+            .setPositiveButton("Сохранить", (d, w) -> {
+                String s = input.getText().toString().trim();
+                if (s.length() == 0) return;
+                h.name = s;
+                h.notes = notes.getText().toString().trim();
+                h.color = chosen[0];
+                store.saveHabit(h);
+                reload();
+                habitsScreen();
+            })
+            .setNegativeButton("Отмена", null).show();
     }
 
     void addHabit() {
@@ -2093,6 +2142,26 @@ public class MainActivity extends Activity {
         });
         body.addView(syncNow);
 
+        // AI assistant
+        body.addView(switchRow("ИИ-помощник (DeepSeek)", p.getBoolean("ai_enabled", false), checked -> {
+            p.edit().putBoolean("ai_enabled", checked).apply();
+        }));
+        LinearLayout aiKey = row("API-ключ DeepSeek", p.getString("ai_key", "").isEmpty() ? "Не задан" : "••••••••");
+        aiKey.setOnClickListener(v -> {
+            final EditText inp = Ui.et(this, "sk-…", 15);
+            inp.setText(p.getString("ai_key", ""));
+            LinearLayout box = Ui.col(this);
+            box.setPadding(dp(24), dp(8), dp(24), 0);
+            box.addView(inp);
+            new AlertDialog.Builder(this).setTitle("API-ключ DeepSeek").setView(box)
+                .setPositiveButton("Сохранить", (d, w) -> {
+                    p.edit().putString("ai_key", inp.getText().toString().trim()).apply();
+                    pop(); pushSettings();
+                })
+                .setNegativeButton("Отмена", null).show();
+        });
+        body.addView(aiKey);
+
         // backup
         LinearLayout exp = row("Экспорт данных (JSON)", "");
         TextView exb = Ui.tv(this, "Экспорт", 14, Ui.ACCENT);
@@ -2113,7 +2182,7 @@ public class MainActivity extends Activity {
             .setNegativeButton("Отмена", null).show());
         body.addView(clear);
 
-        body.addView(row("Версия", "2.5"));
+        body.addView(row("Версия", "2.6"));
         body.addView(Ui.spacer(this, dp(20)));
         body.addView(Ui.tv(this, "© РыбинскLAB · rybinsklab.ru", 12, Ui.SUB));
 
@@ -2207,7 +2276,7 @@ public class MainActivity extends Activity {
         nm.setGravity(Gravity.CENTER);
         body.addView(nm);
         body.addView(Ui.spacer(this, dp(4)));
-        TextView ver = Ui.tv(this, "Версия 2.5", 13, Ui.SUB);
+        TextView ver = Ui.tv(this, "Версия 2.6", 13, Ui.SUB);
         ver.setGravity(Gravity.CENTER);
         body.addView(ver);
 
@@ -2288,10 +2357,13 @@ public class MainActivity extends Activity {
         LinearLayout body = Ui.col(this);
         body.setPadding(dp(20), dp(8), dp(20), dp(30));
 
+        LinearLayout titleRow = Ui.row(this);
         edTitleInput = Ui.et(this, "Название задачи", 20);
         edTitleInput.setText(ed.title);
         edTitleInput.setTypeface(Typeface.DEFAULT_BOLD);
-        body.addView(edTitleInput);
+        titleRow.addView(edTitleInput, Ui.weight(1));
+        titleRow.addView(micButton(edTitleInput, Ui.ACCENT));
+        body.addView(titleRow);
 
         // template shortcut below title
         LinearLayout tpl = Ui.row(this);
@@ -2364,6 +2436,17 @@ public class MainActivity extends Activity {
                 }).setNegativeButton("Отмена", null).show();
         });
         body.addView(addSub);
+
+        // AI subtasks
+        LinearLayout aiRow = Ui.row(this);
+        aiRow.setPadding(0, dp(4), 0, dp(8));
+        ImageView aiIcon = Ui.icon(this, R.drawable.ic_ai, 16, Ui.ACCENT);
+        aiRow.addView(aiIcon);
+        TextView aiText = Ui.tv(this, "Сгенерировать подзадачи (ИИ)", 14, Ui.ACCENT);
+        aiText.setPadding(dp(6), 0, 0, 0);
+        aiRow.addView(aiText);
+        aiRow.setOnClickListener(v -> aiSubtasks());
+        body.addView(aiRow);
 
         if (ed.id != 0) {
             TextView del = Ui.tv(this, "Удалить задачу", 15, Ui.RED, true);
@@ -2986,6 +3069,35 @@ public class MainActivity extends Activity {
         }
     }
 
+    void aiSubtasks() {
+        SharedPreferences p = getSharedPreferences("planner", 0);
+        if (!p.getBoolean("ai_enabled", false)) { toast("Включите ИИ-помощника в настройках"); return; }
+        if (p.getString("ai_key", "").trim().isEmpty()) { toast("Введите API-ключ DeepSeek в настройках"); return; }
+        final String title = edTitleInput.getText().toString().trim();
+        if (title.isEmpty()) { toast("Введите название задачи"); return; }
+        toast("Генерация подзадач…");
+        new Thread(() -> {
+            try {
+                String sys = "Ты — помощник планировщика. Разбей задачу пользователя на конкретные подзадачи-шаги. Отвечай ТОЛЬКО списком, по одной подзадаче на строку, без нумерации и маркеров, кратко (до 6 слов).";
+                String answer = DeepSeekClient.ask(this, sys, "Задача: " + title);
+                final ArrayList<String> subs = new ArrayList<>();
+                for (String line : answer.split("\n")) {
+                    String s = line.trim().replaceAll("^[-*•\\d.\\s]+", "").trim();
+                    if (s.length() > 0) subs.add(s);
+                }
+                runOnUiThread(() -> {
+                    if (subs.isEmpty()) { toast("Не удалось распознать подзадачи"); return; }
+                    for (String s : subs) { Store.Task sub = new Store.Task(); sub.title = s; ed.subs.add(sub); }
+                    buildEditor();
+                    toast("Добавлено " + subs.size() + " подзадач");
+                });
+            } catch (Exception e) {
+                final String msg = e.getMessage() == null ? "Ошибка" : e.getMessage();
+                runOnUiThread(() -> toast("Ошибка: " + msg));
+            }
+        }).start();
+    }
+
     void saveEditor() {
         String title = edTitleInput.getText().toString().trim();
         if (title.length() == 0) { toast("Введите название"); return; }
@@ -3097,6 +3209,16 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
+        if (req == REQ_VOICE) {
+            if (res == RESULT_OK && data != null) {
+                java.util.ArrayList<String> r = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+                if (r != null && !r.isEmpty() && voiceTarget != null) {
+                    voiceTarget.setText(r.get(0));
+                    voiceTarget.setSelection(r.get(0).length());
+                }
+            }
+            return;
+        }
         if (res != RESULT_OK || data == null || data.getData() == null) return;
         try {
             if (req == REQ_EXPORT) {
@@ -3116,5 +3238,19 @@ public class MainActivity extends Activity {
                 }
             }
         } catch (Exception e) { toast("Ошибка: " + e.getMessage()); }
+    }
+
+    void startVoiceInput() {
+        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU");
+        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "Говорите…");
+        try { startActivityForResult(i, REQ_VOICE); } catch (Exception e) { toast("Голосовой ввод недоступен"); }
+    }
+
+    ImageView micButton(final EditText target, int color) {
+        ImageView mic = Ui.iconTouch(this, R.drawable.ic_mic, 40, color);
+        mic.setOnClickListener(v -> { voiceTarget = target; startVoiceInput(); });
+        return mic;
     }
 }

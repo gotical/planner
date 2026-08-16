@@ -52,6 +52,7 @@ public class Store {
     static class Habit {
         long id = 0;
         String name = "";
+        String notes = "";
         int color = 0xFF4772FA;
         long created = 0;
     }
@@ -80,12 +81,12 @@ public class Store {
     }
 
     static class DB extends SQLiteOpenHelper {
-        DB(Context c) { super(c, "planner.db", null, 5); }
+        DB(Context c) { super(c, "planner.db", null, 6); }
         public void onCreate(SQLiteDatabase d) {
             d.execSQL("CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, notes TEXT, time TEXT, repeat TEXT, list_id INTEGER, due INTEGER, reminder INTEGER, created INTEGER, done_at INTEGER, has_time INTEGER, priority INTEGER, done INTEGER, parent INTEGER, sort INTEGER, pinned INTEGER DEFAULT 0, dismissed INTEGER DEFAULT 0, tags TEXT DEFAULT '', reminders TEXT DEFAULT '', deleted INTEGER DEFAULT 0, deleted_at INTEGER DEFAULT 0)");
             d.execSQL("CREATE TABLE lists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color INTEGER, sort INTEGER)");
             d.execSQL("CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color INTEGER, sort INTEGER)");
-            d.execSQL("CREATE TABLE habits (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color INTEGER, created INTEGER, sort INTEGER)");
+            d.execSQL("CREATE TABLE habits (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color INTEGER, created INTEGER, sort INTEGER, notes TEXT DEFAULT '')");
             d.execSQL("CREATE TABLE habit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, habit_id INTEGER, date TEXT, done INTEGER)");
             d.execSQL("CREATE TABLE focus_log (id INTEGER PRIMARY KEY AUTOINCREMENT, minutes INTEGER, started INTEGER, task_id INTEGER)");
             d.execSQL("CREATE TABLE templates (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, json TEXT)");
@@ -107,6 +108,9 @@ public class Store {
             }
             if (o < 5) {
                 try { d.execSQL("CREATE TABLE wishes (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, url TEXT, price TEXT, created INTEGER)"); } catch (Exception ignored) { }
+            }
+            if (o < 6) {
+                try { d.execSQL("ALTER TABLE habits ADD COLUMN notes TEXT DEFAULT ''"); } catch (Exception ignored) { }
             }
         }
     }
@@ -393,6 +397,7 @@ public class Store {
             Habit h = new Habit();
             h.id = c.getLong(c.getColumnIndex("id"));
             h.name = c.getString(c.getColumnIndex("name"));
+            h.notes = c.getString(c.getColumnIndex("notes"));
             h.color = c.getInt(c.getColumnIndex("color"));
             h.created = c.getLong(c.getColumnIndex("created"));
             l.add(h);
@@ -404,6 +409,7 @@ public class Store {
     void saveHabit(Habit h) {
         ContentValues v = new ContentValues();
         v.put("name", h.name);
+        v.put("notes", h.notes);
         v.put("color", h.color);
         v.put("created", h.created == 0 ? System.currentTimeMillis() : h.created);
         v.put("sort", h.id);
