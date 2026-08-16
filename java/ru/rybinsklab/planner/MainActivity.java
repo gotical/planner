@@ -722,6 +722,15 @@ public class MainActivity extends Activity {
             int fc = t.priority == 3 ? Ui.RED : (t.priority == 2 ? Ui.ORANGE : Ui.BLUE);
             r.addView(Ui.tv(this, f, 14, fc, true));
         }
+
+        // big expand arrow on the right
+        if (t.subs.size() > 0) {
+            TextView arrow = Ui.tv(this, t.expanded ? "▾" : "▸", 22, Ui.SUB);
+            arrow.setGravity(Gravity.CENTER);
+            arrow.setPadding(dp(10), dp(6), dp(2), dp(6));
+            arrow.setOnClickListener(v -> { t.expanded = !t.expanded; rebuildTasks(); });
+            r.addView(arrow);
+        }
         card.addView(r);
 
         // subtasks inside the same card (collapsed by default)
