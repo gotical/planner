@@ -801,6 +801,8 @@ public class MainActivity extends Activity {
         if (r != null && r.startsWith("dates:")) return datesLabel(r);
         switch (r) {
             case "daily": return "Ежедневно";
+            case "daily2": return "Через день";
+            case "daily3": return "Раз в 3 дня";
             case "weekly": return "Еженедельно";
             case "weekly2": return "Раз в 2 недели";
             case "weekly3": return "Раз в 3 недели";
@@ -878,6 +880,8 @@ public class MainActivity extends Activity {
     long nextDue(long due, String repeat) {
         Calendar c = Calendar.getInstance(); c.setTimeInMillis(due);
         if ("daily".equals(repeat)) c.add(Calendar.DAY_OF_MONTH, 1);
+        else if ("daily2".equals(repeat)) c.add(Calendar.DAY_OF_MONTH, 2);
+        else if ("daily3".equals(repeat)) c.add(Calendar.DAY_OF_MONTH, 3);
         else if ("weekly".equals(repeat)) c.add(Calendar.WEEK_OF_YEAR, 1);
         else if ("weekly2".equals(repeat)) c.add(Calendar.WEEK_OF_YEAR, 2);
         else if ("weekly3".equals(repeat)) c.add(Calendar.WEEK_OF_YEAR, 3);
@@ -2595,7 +2599,15 @@ public class MainActivity extends Activity {
         LinearLayout list = Ui.col(this);
         list.setPadding(0, dp(8), 0, dp(8));
         addRepeatRow(list, holder, "Не повторять", () -> { ed.repeat = ""; buildEditor(); });
-        addRepeatRow(list, holder, "Ежедневно", () -> { ed.repeat = "daily"; buildEditor(); });
+        // ежедневно: тап = daily, долгое нажатие = интервал
+        LinearLayout dr = Ui.row(this);
+        dr.setPadding(dp(20), dp(14), dp(20), dp(14));
+        dr.addView(Ui.tv(this, "Ежедневно", 16, Ui.TEXT), Ui.weight(1));
+        TextView dhint = Ui.tv(this, "⋯", 18, Ui.SUB);
+        dr.addView(dhint);
+        dr.setOnClickListener(v -> { if (holder[0] != null) holder[0].dismiss(); ed.repeat = "daily"; buildEditor(); });
+        dr.setOnLongClickListener(v -> { if (holder[0] != null) holder[0].dismiss(); pickDailyInterval(); return true; });
+        list.addView(dr);
         // еженедельно: тап = weekly, долгое нажатие = интервал
         LinearLayout wr = Ui.row(this);
         wr.setPadding(dp(20), dp(14), dp(20), dp(14));
@@ -2626,6 +2638,14 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Интервал недели")
             .setItems(new String[]{"Еженедельно", "Раз в 2 недели", "Раз в 3 недели"}, (d, w) -> {
                 ed.repeat = w == 0 ? "weekly" : (w == 1 ? "weekly2" : "weekly3");
+                buildEditor();
+            }).show();
+    }
+
+    void pickDailyInterval() {
+        new AlertDialog.Builder(this).setTitle("Интервал дня")
+            .setItems(new String[]{"Ежедневно", "Через день", "Раз в 3 дня"}, (d, w) -> {
+                ed.repeat = w == 0 ? "daily" : (w == 1 ? "daily2" : "daily3");
                 buildEditor();
             }).show();
     }
