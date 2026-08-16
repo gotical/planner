@@ -1190,7 +1190,7 @@ public class MainActivity extends Activity {
     }
 
     void quickAdd() {
-        final EditText input = Ui.et(this, "Например: позвонить маме завтра в 18:00", 16);
+        final EditText input = Ui.et(this, "Что сегодня сделать?", 16);
         LinearLayout inputRow = Ui.row(this);
         inputRow.addView(input, Ui.weight(1));
         inputRow.addView(micButton(input, Ui.ACCENT));
@@ -1198,6 +1198,15 @@ public class MainActivity extends Activity {
         box.setPadding(dp(24), dp(8), dp(24), 0);
         box.addView(inputRow);
         final AlertDialog[] holder = new AlertDialog[1];
+        LinearLayout ai = Ui.row(this);
+        ai.setPadding(0, dp(8), 0, 0);
+        ImageView aiIcon = Ui.icon(this, R.drawable.ic_ai, 16, Ui.ACCENT);
+        ai.addView(aiIcon);
+        TextView aiText = Ui.tv(this, "Предложить задачу (ИИ)", 13, Ui.ACCENT);
+        aiText.setPadding(dp(6), 0, 0, 0);
+        ai.addView(aiText);
+        ai.setOnClickListener(v -> aiSuggest(input));
+        box.addView(ai);
         LinearLayout tpl = Ui.row(this);
         tpl.setPadding(0, dp(8), 0, 0);
         ImageView tplIcon = Ui.icon(this, R.drawable.ic_add, 16, Ui.ACCENT);
@@ -2182,7 +2191,7 @@ public class MainActivity extends Activity {
             .setNegativeButton("Отмена", null).show());
         body.addView(clear);
 
-        body.addView(row("Версия", "2.6"));
+        body.addView(row("Версия", "2.7"));
         body.addView(Ui.spacer(this, dp(20)));
         body.addView(Ui.tv(this, "© РыбинскLAB · rybinsklab.ru", 12, Ui.SUB));
 
@@ -2276,7 +2285,7 @@ public class MainActivity extends Activity {
         nm.setGravity(Gravity.CENTER);
         body.addView(nm);
         body.addView(Ui.spacer(this, dp(4)));
-        TextView ver = Ui.tv(this, "Версия 2.6", 13, Ui.SUB);
+        TextView ver = Ui.tv(this, "Версия 2.7", 13, Ui.SUB);
         ver.setGravity(Gravity.CENTER);
         body.addView(ver);
 
@@ -3096,6 +3105,57 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> toast("Ошибка: " + msg));
             }
         }).start();
+    }
+
+    void aiSuggest(final EditText target) {
+        SharedPreferences p = getSharedPreferences("planner", 0);
+        if (!p.getBoolean("ai_enabled", false)) { toast("Включите ИИ-помощника в настройках"); return; }
+        if (p.getString("ai_key", "").trim().isEmpty()) { toast("Введите API-ключ DeepSeek в настройках"); return; }
+        toast("Подбор задачи…");
+        new Thread(() -> {
+            try {
+                String context = buildAiContext();
+                String sys = "Ты — умный планировщик. На основе истории и шаблонов пользователя предложи ОДНУ релевантную задачу на сегодня, учитывая текущий день недели. Отвечай ТОЛЬКО названием задачи (до 10 слов), без пояснений, нумерации и списков.";
+                String answer = DeepSeekClient.ask(this, sys, context);
+                final String result = answer.trim().replaceAll("^[-*•\\d.\\s]+", "").trim();
+                runOnUiThread(() -> {
+                    if (result.isEmpty()) { toast("Не удалось подобрать задачу"); return; }
+                    target.setText(result);
+                    target.setSelection(result.length());
+                });
+            } catch (Exception e) {
+                final String msg = e.getMessage() == null ? "Ошибка" : e.getMessage();
+                runOnUiThread(() -> toast("Ошибка: " + msg));
+            }
+        }).start();
+    }
+
+    String buildAiContext() {
+        long now = System.currentTimeMillis();
+        ArrayList<String> recent = new ArrayList<>();
+        long threshold = now - 30L * 86400000L;
+        for (Store.Task t : tasks) if (t.parent == null && t.deleted == 0 && (t.createdAt >= threshold || (t.due > 0 && t.due >= threshold))) recent.add(t.title);
+        if (recent.size() < 5) {
+            threshold = now - 60L * 86400000L;
+            recent.clear();
+            for (Store.Task t : tasks) if (t.parent == null && t.deleted == 0 && (t.createdAt >= threshold || (t.due > 0 && t.due >= threshold))) recent.add(t.title);
+        }
+        String[] wd = {"воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"};
+        String[] mo = {"января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"};
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        StringBuilder sb = new StringBuilder();
+        sb.append("Сегодня: ").append(wd[c.get(java.util.Calendar.DAY_OF_WEEK) - 1]).append(", ")
+          .append(c.get(java.util.Calendar.DAY_OF_MONTH)).append(" ").append(mo[c.get(java.util.Calendar.MONTH)]).append("\n");
+        if (!recent.isEmpty()) {
+            sb.append("Недавние задачи: ").append(String.join(", ", recent.subList(0, Math.min(20, recent.size())))).append("\n");
+        } else {
+            sb.append("Недавних задач нет.\n");
+        }
+        ArrayList<String> tpl = new ArrayList<>();
+        for (Store.Template tp : store.loadTemplates()) tpl.add(tp.name);
+        if (!tpl.isEmpty()) sb.append("Шаблоны: ").append(String.join(", ", tpl)).append("\n");
+        sb.append("Предложи одну задачу на сегодня.");
+        return sb.toString();
     }
 
     void saveEditor() {
