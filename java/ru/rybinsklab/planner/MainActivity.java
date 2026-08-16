@@ -699,7 +699,14 @@ public class MainActivity extends Activity {
         info.addView(name);
         if (t.subs.size() > 0) {
             int done = 0; for (Store.Task s : t.subs) if (s.done == 1) done++;
-            info.addView(Ui.tv(this, "Подзадачи: " + done + "/" + t.subs.size(), 11, Ui.SUB));
+            LinearLayout subsToggle = Ui.row(this);
+            TextView arrow = Ui.tv(this, t.expanded ? "▾" : "▸", 12, Ui.ACCENT);
+            subsToggle.addView(arrow);
+            TextView subText = Ui.tv(this, "Подзадачи: " + done + "/" + t.subs.size(), 11, Ui.SUB);
+            subText.setPadding(dp(4), 0, 0, 0);
+            subsToggle.addView(subText);
+            subsToggle.setOnClickListener(v -> { t.expanded = !t.expanded; rebuildTasks(); });
+            info.addView(subsToggle);
         }
         // meta line
         String meta = metaText(t);
@@ -717,8 +724,8 @@ public class MainActivity extends Activity {
         }
         card.addView(r);
 
-        // subtasks inside the same card
-        if (t.subs.size() > 0) {
+        // subtasks inside the same card (collapsed by default)
+        if (t.subs.size() > 0 && t.expanded) {
             View div = new View(this);
             div.setBackgroundColor(Ui.DIVIDER);
             LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, 1);
@@ -751,7 +758,7 @@ public class MainActivity extends Activity {
         int cs = dp(22);
         ch.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
         ch.setBackground(s.done == 1 ? Ui.oval(Ui.ACCENT) : Ui.ring(this, Ui.BORDER, 1));
-        ch.setOnClickListener(v -> { s.done = s.done == 1 ? 0 : 1; store.saveTask(s); reload(); rebuildTasks(); });
+        ch.setOnClickListener(v -> { s.done = s.done == 1 ? 0 : 1; store.saveTask(s); rebuildTasks(); });
         r.addView(ch);
         TextView sn = Ui.tv(this, s.title, 14, s.done == 1 ? Ui.SUB : Ui.TEXT);
         if (s.done == 1) sn.setPaintFlags(sn.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);

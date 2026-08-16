@@ -35,6 +35,7 @@ public class Store {
         ArrayList<Integer> remOffsets = new ArrayList<>();  // minutes before due
         ArrayList<Task> subs = new ArrayList<>();
         Task parent = null;
+        boolean expanded = false;   // UI state, not persisted
     }
 
     static class TList {
