@@ -1198,15 +1198,17 @@ public class MainActivity extends Activity {
         box.setPadding(dp(24), dp(8), dp(24), 0);
         box.addView(inputRow);
         final AlertDialog[] holder = new AlertDialog[1];
-        LinearLayout ai = Ui.row(this);
-        ai.setPadding(0, dp(8), 0, 0);
-        ImageView aiIcon = Ui.icon(this, R.drawable.ic_ai, 16, Ui.ACCENT);
-        ai.addView(aiIcon);
-        TextView aiText = Ui.tv(this, "Предложить задачу (ИИ)", 13, Ui.ACCENT);
-        aiText.setPadding(dp(6), 0, 0, 0);
-        ai.addView(aiText);
-        ai.setOnClickListener(v -> aiSuggest(input));
-        box.addView(ai);
+        if (aiReady()) {
+            LinearLayout ai = Ui.row(this);
+            ai.setPadding(0, dp(8), 0, 0);
+            ImageView aiIcon = Ui.icon(this, R.drawable.ic_ai, 16, Ui.ACCENT);
+            ai.addView(aiIcon);
+            TextView aiText = Ui.tv(this, "Предложить задачу (ИИ)", 13, Ui.ACCENT);
+            aiText.setPadding(dp(6), 0, 0, 0);
+            ai.addView(aiText);
+            ai.setOnClickListener(v -> aiSuggest(input));
+            box.addView(ai);
+        }
         LinearLayout tpl = Ui.row(this);
         tpl.setPadding(0, dp(8), 0, 0);
         ImageView tplIcon = Ui.icon(this, R.drawable.ic_add, 16, Ui.ACCENT);
@@ -1792,7 +1794,12 @@ public class MainActivity extends Activity {
         final LinearLayout row = Ui.row(this);
         row.setPadding(0, dp(16), 0, 0);
         renderColorPicker(row, chosen);
-        return row;
+        HorizontalScrollView hsv = new HorizontalScrollView(this);
+        hsv.setHorizontalScrollBarEnabled(false);
+        hsv.addView(row);
+        LinearLayout wrap = Ui.col(this);
+        wrap.addView(hsv);
+        return wrap;
     }
 
     void renderColorPicker(final LinearLayout row, final int[] chosen) {
@@ -2248,7 +2255,10 @@ public class MainActivity extends Activity {
             });
             dots.addView(wrap);
         }
-        r.addView(dots);
+        HorizontalScrollView hsv = new HorizontalScrollView(this);
+        hsv.setHorizontalScrollBarEnabled(false);
+        hsv.addView(dots);
+        r.addView(hsv);
         return r;
     }
 
@@ -2446,16 +2456,18 @@ public class MainActivity extends Activity {
         });
         body.addView(addSub);
 
-        // AI subtasks
-        LinearLayout aiRow = Ui.row(this);
-        aiRow.setPadding(0, dp(4), 0, dp(8));
-        ImageView aiIcon = Ui.icon(this, R.drawable.ic_ai, 16, Ui.ACCENT);
-        aiRow.addView(aiIcon);
-        TextView aiText = Ui.tv(this, "Сгенерировать подзадачи (ИИ)", 14, Ui.ACCENT);
-        aiText.setPadding(dp(6), 0, 0, 0);
-        aiRow.addView(aiText);
-        aiRow.setOnClickListener(v -> aiSubtasks());
-        body.addView(aiRow);
+        // AI subtasks (only when enabled)
+        if (aiReady()) {
+            LinearLayout aiRow = Ui.row(this);
+            aiRow.setPadding(0, dp(4), 0, dp(8));
+            ImageView aiIcon = Ui.icon(this, R.drawable.ic_ai, 16, Ui.ACCENT);
+            aiRow.addView(aiIcon);
+            TextView aiText = Ui.tv(this, "Сгенерировать подзадачи (ИИ)", 14, Ui.ACCENT);
+            aiText.setPadding(dp(6), 0, 0, 0);
+            aiRow.addView(aiText);
+            aiRow.setOnClickListener(v -> aiSubtasks());
+            body.addView(aiRow);
+        }
 
         if (ed.id != 0) {
             TextView del = Ui.tv(this, "Удалить задачу", 15, Ui.RED, true);
@@ -3078,10 +3090,13 @@ public class MainActivity extends Activity {
         }
     }
 
-    void aiSubtasks() {
+    boolean aiReady() {
         SharedPreferences p = getSharedPreferences("planner", 0);
-        if (!p.getBoolean("ai_enabled", false)) { toast("Включите ИИ-помощника в настройках"); return; }
-        if (p.getString("ai_key", "").trim().isEmpty()) { toast("Введите API-ключ DeepSeek в настройках"); return; }
+        return p.getBoolean("ai_enabled", false) && !p.getString("ai_key", "").trim().isEmpty();
+    }
+
+    void aiSubtasks() {
+        if (!aiReady()) { toast("Включите ИИ-помощника и введите ключ в настройках"); return; }
         final String title = edTitleInput.getText().toString().trim();
         if (title.isEmpty()) { toast("Введите название задачи"); return; }
         toast("Генерация подзадач…");
@@ -3108,9 +3123,7 @@ public class MainActivity extends Activity {
     }
 
     void aiSuggest(final EditText target) {
-        SharedPreferences p = getSharedPreferences("planner", 0);
-        if (!p.getBoolean("ai_enabled", false)) { toast("Включите ИИ-помощника в настройках"); return; }
-        if (p.getString("ai_key", "").trim().isEmpty()) { toast("Введите API-ключ DeepSeek в настройках"); return; }
+        if (!aiReady()) { toast("Включите ИИ-помощника и введите ключ в настройках"); return; }
         toast("Подбор задачи…");
         new Thread(() -> {
             try {
