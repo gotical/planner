@@ -1,5 +1,7 @@
 package ru.rybinsklab.planner;
 
+import android.animation.ObjectAnimator;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -10,6 +12,8 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -18,7 +22,7 @@ import android.widget.TextView;
 
 public final class Ui {
 
-    static int BG, CARD, CARD2, TEXT, SUB, FAINT, ACCENT, ACCENT_SOFT, DIVIDER, RED, GREEN, BLUE, ORANGE, BORDER;
+    static int BG, CARD, CARD2, TEXT, SUB, FAINT, ACCENT, ACCENT_SOFT, ACCENT_SOFT2, DIVIDER, RED, GREEN, BLUE, ORANGE, BORDER, SHADOW;
     static boolean dark;
 
     static void init(Context c) {
@@ -26,15 +30,16 @@ public final class Ui {
         dark = p.getBoolean("dark", false);
         ACCENT = p.getInt("accent", 0xFF4772FA);
         ACCENT_SOFT = (ACCENT & 0x00FFFFFF) | 0x1A000000;
+        ACCENT_SOFT2 = (ACCENT & 0x00FFFFFF) | 0x33000000;
         if (dark) {
             BG = 0xFF141414; CARD = 0xFF1F1F1F; CARD2 = 0xFF262626;
             TEXT = 0xFFECECEC; SUB = 0xFF9A9A9A; FAINT = 0xFF6A6A6A;
-            DIVIDER = 0xFF2A2A2A; BORDER = 0xFF333333;
+            DIVIDER = 0xFF2A2A2A; BORDER = 0xFF333333; SHADOW = 0x33000000;
             RED = 0xFFEF5350; GREEN = 0xFF66BB6A; BLUE = 0xFF42A5F5; ORANGE = 0xFFFFA726;
         } else {
             BG = 0xFFF7F7F9; CARD = 0xFFFFFFFF; CARD2 = 0xFFF0F1F4;
             TEXT = 0xFF202020; SUB = 0xFF787878; FAINT = 0xFFB0B0B0;
-            DIVIDER = 0xFFEDEDEF; BORDER = 0xFFE4E4E8;
+            DIVIDER = 0xFFEDEDEF; BORDER = 0xFFE4E4E8; SHADOW = 0x1A000000;
             RED = 0xFFE53935; GREEN = 0xFF43A047; BLUE = 0xFF1E88E5; ORANGE = 0xFFF57C00;
         }
     }
@@ -110,5 +115,66 @@ public final class Ui {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1);
         lp.setMargins(padding, 0, padding, 0);
         parent.addView(v, lp);
+    }
+
+    /** Применяет Material 3 elevation к виду через StateListAnimator (только на API 21+). */
+    @android.annotation.SuppressLint("NewApi")
+    static void elevate(View v, float restDp, float pressedDp) {
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            android.animation.StateListAnimator sla = new android.animation.StateListAnimator();
+            sla.addState(new int[]{android.R.attr.state_pressed},
+                ObjectAnimator.ofFloat(v, "translationZ", dp(v.getContext(), pressedDp)).setDuration(120));
+            sla.addState(new int[]{},
+                ObjectAnimator.ofFloat(v, "translationZ", dp(v.getContext(), restDp)).setDuration(120));
+            v.setStateListAnimator(sla);
+        }
+    }
+
+    /** Появление FAB с пружинкой. */
+    static void popIn(View v) {
+        v.setScaleX(0.4f);
+        v.setScaleY(0.4f);
+        v.setAlpha(0f);
+        v.animate()
+            .scaleX(1f).scaleY(1f).alpha(1f)
+            .setDuration(380)
+            .setInterpolator(new OvershootInterpolator(2.0f))
+            .start();
+    }
+
+    /** Fade-in для содержимого экрана. */
+    static void fadeIn(View v, long delay) {
+        v.setAlpha(0f);
+        v.setTranslationY(dp(v.getContext(), 12));
+        v.animate()
+            .alpha(1f).translationY(0)
+            .setStartDelay(delay)
+            .setDuration(280)
+            .setInterpolator(new AccelerateDecelerateInterpolator())
+            .start();
+    }
+
+    /** Плавный пульс-эффект для акцентных элементов. */
+    static void pulse(View v) {
+        v.animate().scaleX(1.15f).scaleY(1.15f).setDuration(140)
+            .withEndAction(() -> v.animate().scaleX(1f).scaleY(1f).setDuration(140).start())
+            .start();
+    }
+
+    /** Stagger-анимация: дочерние виды контейнера появляются по очереди. */
+    static void staggerIn(ViewGroup parent, int delayStepMs, int durationMs) {
+        int count = parent.getChildCount();
+        for (int i = 0; i < count; i++) {
+            View child = parent.getChildAt(i);
+            child.setAlpha(0f);
+            child.setTranslationY(dp(parent.getContext(), 10));
+            child.animate()
+                .alpha(1f)
+                .translationY(0)
+                .setStartDelay(i * delayStepMs)
+                .setDuration(durationMs)
+                .setInterpolator(new AccelerateDecelerateInterpolator())
+                .start();
+        }
     }
 }

@@ -441,6 +441,31 @@ public class Store {
         }
     }
 
+    /** Удобный wrapper: отметить привычку на сегодня по millis. */
+    boolean habitDoneAt(long habitId, long dayMillis) {
+        return habitChecked(habitId, dateStr(dayMillis));
+    }
+
+    /** Количество уникальных дней с выполнением у привычки. */
+    int habitTotalDays(long habitId) {
+        Cursor c = db.rawQuery("SELECT COUNT(DISTINCT date) FROM habit_log WHERE habit_id=? AND done=1",
+            new String[]{String.valueOf(habitId)});
+        int n = 0;
+        if (c.moveToFirst()) n = c.getInt(0);
+        c.close();
+        return n;
+    }
+
+    /** Отметить выполнение на конкретный день. */
+    void addHabitMark(long habitId, long dayMillis) {
+        setHabitChecked(habitId, dateStr(dayMillis), true);
+    }
+
+    /** Снять отметку на конкретный день. */
+    void removeHabitMark(long habitId, long dayMillis) {
+        setHabitChecked(habitId, dateStr(dayMillis), false);
+    }
+
     // ---------- helpers ----------
     static String dateStr(long millis) {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(millis));

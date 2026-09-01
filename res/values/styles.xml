@@ -1,11 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+
+    <!-- Базовая тема (Material 3, дневная). Тёмная тема в values-night. -->
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans</item>
+        <item name="android:fontFamily">sans-serif</item>
         <item name="android:colorAccent">#4772FA</item>
         <item name="android:colorPrimary">#4772FA</item>
-        <item name="android:colorPrimaryDark">#4772FA</item>
+        <item name="android:colorPrimaryDark">#5B6CFF</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:statusBarColor">#F7F7F9</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
+
 </resources>

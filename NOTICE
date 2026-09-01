@@ -22,9 +22,14 @@
 
 ## Сторонние ресурсы
 
-Иконки интерфейса — Material Design Icons, © Google LLC,
-распространяются на условиях лицензии Apache License 2.0:
+Иконки интерфейса нарисованы авторами проекта в стиле Material Symbols
+(Material Design Icons), © Google LLC, распространяются на условиях
+лицензии Apache License 2.0:
 https://www.apache.org/licenses/LICENSE-2.0
+
+Иконка приложения (логотип) разработана авторами проекта.
+PNG-иконки для адаптивного лаунчера генерируются из SVG-исходников
+скриптом `tools/gen_icons.sh` (используется `rsvg-convert`).
 
 ## Лицензия
 

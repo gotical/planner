@@ -4,11 +4,16 @@ build/
 *.aab
 *.idsig
 
+# generated launcher icons (PNG; SVG sources are committed in tools/)
+res/mipmap-*/ic_launcher.png
+res/mipmap-*/ic_launcher_round.png
+
 # signing / secrets
 *.jks
 *.keystore
 *.p12
 keystore.properties
+keystore/.password
 
 # gradle / ide
 .gradle/

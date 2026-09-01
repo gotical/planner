@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material You inspired палитра -->
+    <color name="window_background">#F7F7F9</color>
+    <color name="brand_primary">#4772FA</color>
+    <color name="brand_primary_dark">#5B6CFF</color>
+    <color name="brand_primary_soft">#E8EDFE</color>
+    <color name="brand_on_primary">#FFFFFF</color>
+
+    <!-- Поверхности -->
+    <color name="surface_card">#FFFFFF</color>
+    <color name="surface_card_alt">#F0F1F4</color>
+    <color name="surface_divider">#EDEDEF</color>
+    <color name="surface_border">#E4E4E8</color>
+
+    <!-- Текст -->
+    <color name="text_primary">#202020</color>
+    <color name="text_secondary">#787878</color>
+    <color name="text_disabled">#B0B0B0</color>
+
+    <!-- Акценты -->
+    <color name="accent_red">#E53935</color>
+    <color name="accent_green">#43A047</color>
+    <color name="accent_blue">#1E88E5</color>
+    <color name="accent_orange">#F57C00</color>
+
+    <!-- Тень/подсветка -->
+    <color name="shadow_soft">#1A000000</color>
+</resources>

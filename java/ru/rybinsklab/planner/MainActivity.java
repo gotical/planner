@@ -112,16 +112,22 @@ public class MainActivity extends Activity {
 
         content = new FrameLayout(this);
         FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-1, -1);
-        cp.bottomMargin = dp(60);
+        cp.bottomMargin = dp(72);
         root.addView(content, cp);
 
         fabLayer = new FrameLayout(this);
         root.addView(fabLayer, new FrameLayout.LayoutParams(-1, -1));
 
+        // Material 3 navigation bar: pill-shape с большими скруглёнными углами сверху.
         nav = Ui.row(this);
-        nav.setBackgroundColor(Ui.CARD);
-        nav.setPadding(0, dp(4), 0, dp(6));
+        nav.setBackground(Ui.bg(this, Ui.CARD, 20));
+        nav.setPadding(dp(8), dp(10), dp(8), dp(12));
         nav.setGravity(Gravity.CENTER);
+
+        // Лёгкая тень над панелью.
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            nav.setElevation(dp(2));
+        }
 
         nav.addView(navItem(R.drawable.ic_tasks, "Задачи", 0), Ui.weight(1));
         nav.addView(navItem(R.drawable.ic_calendar, "Календарь", 1), Ui.weight(1));
@@ -129,14 +135,9 @@ public class MainActivity extends Activity {
         nav.addView(navItem(R.drawable.ic_habit, "Привычки", 3), Ui.weight(1));
         nav.addView(navItem(R.drawable.ic_more, "Ещё", 4), Ui.weight(1));
 
-        FrameLayout.LayoutParams np = new FrameLayout.LayoutParams(-1, dp(60), Gravity.BOTTOM);
+        FrameLayout.LayoutParams np = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        np.setMargins(dp(12), 0, dp(12), dp(6));
         root.addView(nav, np);
-
-        View navLine = new View(this);
-        navLine.setBackgroundColor(Ui.DIVIDER);
-        FrameLayout.LayoutParams nl = new FrameLayout.LayoutParams(-1, 1, Gravity.BOTTOM);
-        nl.bottomMargin = dp(60);
-        root.addView(navLine, nl);
 
         setContentView(root);
     }
@@ -144,13 +145,24 @@ public class MainActivity extends Activity {
     View navItem(int resId, String label, int id) {
         LinearLayout x = Ui.col(this);
         x.setGravity(Gravity.CENTER);
+        x.setPadding(dp(4), dp(4), dp(4), dp(4));
+        // Pill-индикатор под активной вкладкой (Material 3 NavigationBar style)
+        GradientDrawable indicator = new GradientDrawable();
+        indicator.setCornerRadius(dp(100));
+        indicator.setColor(id == tab ? Ui.ACCENT_SOFT : 0x00000000);
+        x.setBackground(indicator);
+
         ImageView i = Ui.icon(this, resId, 24, id == tab ? Ui.ACCENT : Ui.FAINT);
-        TextView l = Ui.tv(this, label, 10, id == tab ? Ui.ACCENT : Ui.FAINT);
+        TextView l = Ui.tv(this, label, 10, id == tab ? Ui.ACCENT : Ui.FAINT, id == tab);
         l.setGravity(Gravity.CENTER);
         x.addView(i);
         x.addView(l);
-        x.setTag(new View[]{i, l});
-        x.setOnClickListener(v -> { tab = id; closeDrawer(); showTab(id); });
+        x.setTag(new Object[]{i, l, indicator, resId});
+        x.setOnClickListener(v -> {
+            tab = id;
+            closeDrawer();
+            showTab(id);
+        });
         return x;
     }
 
@@ -167,16 +179,25 @@ public class MainActivity extends Activity {
             case 3: habitsScreen(); break;
             default: moreScreen(); break;
         }
+        // Лёгкая анимация появления содержимого для плавности.
+        Ui.fadeIn(content, 60);
     }
 
     void updateNav() {
         for (int i = 0; i < nav.getChildCount(); i++) {
             View v = nav.getChildAt(i);
             if (v.getTag() instanceof View[]) {
-                View[] p = (View[]) v.getTag();
+                Object[] p = (Object[]) v.getTag();
                 int c = i == tab ? Ui.ACCENT : Ui.FAINT;
                 ((ImageView) p[0]).setColorFilter(c, PorterDuff.Mode.SRC_IN);
                 ((TextView) p[1]).setTextColor(c);
+                if (i == tab) {
+                    ((TextView) p[1]).setTypeface(Typeface.DEFAULT_BOLD);
+                } else {
+                    ((TextView) p[1]).setTypeface(Typeface.DEFAULT);
+                }
+                GradientDrawable ind = (GradientDrawable) p[2];
+                ind.setColor(i == tab ? Ui.ACCENT_SOFT : 0x00000000);
             }
         }
     }
@@ -184,96 +205,209 @@ public class MainActivity extends Activity {
     // ================= DRAWER =================
     void openDrawer() {
         if (drawerLayer != null) root.removeView(drawerLayer);
+
+        // Полноэкранный контейнер с затемнением (Material 3 modal navigation drawer).
         drawerLayer = new FrameLayout(this);
         drawerLayer.setBackgroundColor(0x99000000);
         drawerLayer.setClickable(true);
         drawerLayer.setOnClickListener(v -> closeDrawer());
 
+        // Панель drawer (фиксированной ширины, скруглённые правые углы).
         LinearLayout panel = Ui.col(this);
-        panel.setBackgroundColor(Ui.CARD);
-        panel.setPadding(0, dp(18), 0, dp(18));
+        GradientDrawable panelBg = new GradientDrawable();
+        panelBg.setColor(Ui.CARD);
+        // Скруглённые правые верхний и нижний углы (Material 3 modal drawer).
+        float[] radii = new float[]{
+            0, 0,                      // top-left
+            dp(28), dp(28),            // top-right
+            dp(28), dp(28),            // bottom-right
+            0, 0                       // bottom-left
+        };
+        panelBg.setCornerRadii(radii);
+        panel.setBackground(panelBg);
+        panel.setClipToOutline(true);
+        // Elevation drawer
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            panel.setElevation(dp(16));
+        }
 
-        ScrollView sv = Ui.scroll(this);
-        LinearLayout col = Ui.col(this);
+        // === ПРОФИЛЬНАЯ ШАПКА с градиентом ===
+        LinearLayout header = Ui.col(this);
+        GradientDrawable headerBg = new GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            new int[]{ Ui.ACCENT, darken(Ui.ACCENT) }
+        );
+        header.setBackground(headerBg);
+        header.setPadding(dp(20), dp(28), dp(20), dp(24));
 
-        // profile
-        LinearLayout prof = Ui.row(this);
-        prof.setPadding(dp(20), dp(8), dp(20), dp(16));
-        TextView av = Ui.tv(this, "Р", 22, Color.WHITE, true);
+        LinearLayout profRow = Ui.row(this);
+        // Аватар
+        FrameLayout avatarWrap = new FrameLayout(this);
+        GradientDrawable avatarBg = new GradientDrawable();
+        avatarBg.setShape(GradientDrawable.OVAL);
+        avatarBg.setColor(0x33FFFFFF);
+        avatarWrap.setBackground(avatarBg);
+        int avSize = dp(56);
+        FrameLayout.LayoutParams avLp = new FrameLayout.LayoutParams(avSize, avSize);
+        avatarWrap.setLayoutParams(avLp);
+
+        TextView av = Ui.tv(this, "Р", 24, Color.WHITE, true);
         av.setGravity(Gravity.CENTER);
-        av.setBackground(Ui.oval(Ui.ACCENT));
-        int as = dp(46);
-        av.setLayoutParams(new LinearLayout.LayoutParams(as, as));
-        prof.addView(av);
+        FrameLayout.LayoutParams avTv = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+        avatarWrap.addView(av, avTv);
+        profRow.addView(avatarWrap);
+
         LinearLayout pn = Ui.col(this);
-        pn.setPadding(dp(12), 0, 0, 0);
-        pn.addView(Ui.tv(this, "РыбинскLAB", 16, Ui.TEXT, true));
-        pn.addView(Ui.tv(this, "rybinsklab.ru", 12, Ui.SUB));
-        prof.addView(pn, Ui.weight(1));
-        col.addView(prof);
+        pn.setPadding(dp(14), 0, 0, 0);
+        TextView nameTv = Ui.tv(this, "РыбинскLAB", 17, Color.WHITE, true);
+        nameTv.setShadowLayer(2f, 0, 1, 0x40000000);
+        pn.addView(nameTv);
+        TextView subTv = Ui.tv(this, "rybinsklab.ru", 12, 0xCCFFFFFF);
+        subTv.setPadding(0, dp(2), 0, 0);
+        pn.addView(subTv);
+        profRow.addView(pn, Ui.weight(1));
+        header.addView(profRow);
+        // Подпись "v 3.0" под профилем
+        TextView verBadge = Ui.tv(this, "Планировщик · v 3.0", 11, 0xCCFFFFFF);
+        verBadge.setPadding(0, dp(8), 0, 0);
+        header.addView(verBadge);
 
-        Ui.divider(col, this, dp(20));
+        panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
-        col.addView(drawerItem(R.drawable.ic_today, "Сегодня", "today", null));
-        col.addView(drawerItem(R.drawable.ic_event, "Завтра", "tomorrow", null));
-        col.addView(drawerItem(R.drawable.ic_date_range, "Следующие 7 дней", "next7", null));
-        col.addView(drawerItem(R.drawable.ic_list, "Все задачи", "all", null));
-        col.addView(drawerItem(R.drawable.ic_done_all, "Завершённые", "completed", null));
-        col.addView(drawerItem(R.drawable.ic_block, "Пропущенные", "skipped", null));
-        col.addView(drawerItem(R.drawable.ic_delete, "Корзина", "trash", null));
-        col.addView(drawerItem(R.drawable.ic_favorite, "Желания", "wish", null));
+        // === СКРОЛЛИРУЕМАЯ ЧАСТЬ ===
+        ScrollView sv = Ui.scroll(this);
+        sv.setVerticalScrollBarEnabled(false);
+        LinearLayout col = Ui.col(this);
+        col.setPadding(0, dp(8), 0, dp(20));
 
-        Ui.divider(col, this, dp(20));
+        // --- Главное меню ---
+        addSectionHeader(col, "ЗАДАЧИ");
+        col.addView(drawerItem(R.drawable.ic_today, "Сегодня", "today", Ui.ACCENT));
+        col.addView(drawerItem(R.drawable.ic_event, "Завтра", "tomorrow", Ui.BLUE));
+        col.addView(drawerItem(R.drawable.ic_date_range, "Следующие 7 дней", "next7", Ui.ORANGE));
+        col.addView(drawerItem(R.drawable.ic_list, "Все задачи", "all", Ui.SUB));
+        col.addView(drawerItem(R.drawable.ic_done_all, "Завершённые", "completed", Ui.GREEN));
+        col.addView(drawerItem(R.drawable.ic_block, "Пропущенные", "skipped", Ui.RED));
+        col.addView(drawerItem(R.drawable.ic_delete, "Корзина", "trash", Ui.FAINT));
+        col.addView(drawerItem(R.drawable.ic_favorite, "Желания", "wish", 0xFFE91E63));
 
-        TextView lh = Ui.tv(this, "Списки", 12, Ui.SUB, true);
-        lh.setPadding(dp(20), dp(14), dp(20), dp(6));
-        col.addView(lh);
-        col.addView(drawerItem(R.drawable.ic_inbox, "Входящие", "inbox", null));
+        // --- Списки ---
+        addSectionHeader(col, "МОИ СПИСКИ");
+        col.addView(drawerItem(R.drawable.ic_inbox, "Входящие", "inbox", Ui.SUB));
         for (Store.TList l : lists) {
             col.addView(drawerItem(R.drawable.ic_list, l.name, "list:" + l.id, l.color));
         }
-        TextView addList = Ui.tv(this, "  +  Добавить список", 14, Ui.ACCENT);
-        addList.setPadding(dp(20), dp(12), dp(20), dp(12));
-        addList.setOnClickListener(v -> { closeDrawer(); addListDialog(); });
-        col.addView(addList);
+        col.addView(drawerAddItem("Добавить список", () -> { closeDrawer(); addListDialog(); }));
 
-        Ui.divider(col, this, dp(20));
+        // --- Теги ---
         if (tags.size() > 0) {
-            TextView th = Ui.tv(this, "Теги", 12, Ui.SUB, true);
-            th.setPadding(dp(20), dp(14), dp(20), dp(6));
-            col.addView(th);
+            addSectionHeader(col, "ТЕГИ");
             for (Store.Tag g : tags) {
                 col.addView(drawerItem(R.drawable.ic_tag, g.name, "tag:" + g.id, g.color));
             }
         }
-        TextView addTag = Ui.tv(this, "  +  Добавить тег", 14, Ui.ACCENT);
-        addTag.setPadding(dp(20), dp(12), dp(20), dp(12));
-        addTag.setOnClickListener(v -> { closeDrawer(); addTagDialog(); });
-        col.addView(addTag);
+        col.addView(drawerAddItem("Добавить тег", () -> { closeDrawer(); addTagDialog(); }));
 
-        Ui.divider(col, this, dp(20));
-        col.addView(drawerItem(R.drawable.ic_template, "Шаблоны", "__templates", null));
-        col.addView(drawerItem(R.drawable.ic_settings, "Настройки", "__settings", null));
-        col.addView(drawerItem(R.drawable.ic_info, "О приложении", "__about", null));
+        // --- Дополнительно ---
+        addSectionHeader(col, "СЕРВИС");
+        col.addView(drawerItem(R.drawable.ic_template, "Шаблоны", "__templates", Ui.ORANGE));
+        col.addView(drawerItem(R.drawable.ic_settings, "Настройки", "__settings", Ui.SUB));
+        col.addView(drawerItem(R.drawable.ic_info, "О приложении", "__about", Ui.SUB));
 
         sv.addView(col);
-        panel.addView(sv, new LinearLayout.LayoutParams(-1, -1));
+        panel.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(dp(292), -1, Gravity.LEFT);
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(dp(300), -1, Gravity.LEFT);
         drawerLayer.addView(panel, plp);
         root.addView(drawerLayer, new FrameLayout.LayoutParams(-1, -1));
+
+        // === ПЛАВНАЯ АНИМАЦИЯ ПОЯВЛЕНИЯ ===
+        // 1. Затемнение fade-in
+        drawerLayer.setAlpha(0f);
+        drawerLayer.animate().alpha(1f).setDuration(260).start();
+        // 2. Panel slide-in слева
+        panel.setTranslationX(-dp(300));
+        panel.animate().translationX(0)
+            .setDuration(320)
+            .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f))
+            .start();
     }
 
-    View drawerItem(int resId, String label, final String target, Integer color) {
+    /** Затемняет цвет (используется для градиента в шапке drawer). */
+    int darken(int c) {
+        float factor = 0.78f;
+        int a = (c >>> 24) & 0xFF;
+        int r = (int) (((c >>> 16) & 0xFF) * factor);
+        int g = (int) (((c >>> 8) & 0xFF) * factor);
+        int b = (int) ((c & 0xFF) * factor);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    /** Заголовок секции в drawer. */
+    void addSectionHeader(LinearLayout parent, String text) {
+        TextView h = Ui.tv(this, text, 11, Ui.SUB, true);
+        h.setPadding(dp(20), dp(16), dp(20), dp(6));
+        h.setLetterSpacing(0.12f);
+        parent.addView(h);
+    }
+
+    /** Элемент drawer в новом стиле — pill-индикатор активного, цветная иконка. */
+    View drawerItem(int resId, String label, final String target, Integer iconColor) {
         LinearLayout r = Ui.row(this);
-        r.setPadding(dp(20), dp(12), dp(16), dp(12));
-        int c = color != null ? color : Ui.SUB;
-        ImageView ic = Ui.icon(this, resId, 22, c);
-        ic.setLayoutParams(new LinearLayout.LayoutParams(dp(28), dp(28)));
-        r.addView(ic);
+        r.setPadding(dp(20), dp(10), dp(20), dp(10));
+        r.setGravity(Gravity.CENTER_VERTICAL);
+
         boolean sel = view.equals(target);
-        r.addView(Ui.tv(this, label, 15, sel ? Ui.ACCENT : Ui.TEXT, sel), Ui.weight(1));
+        int accent = iconColor != null ? iconColor : Ui.SUB;
+
+        // Контейнер иконки (квадрат со скруглением — Material 3 list item)
+        FrameLayout iconWrap = new FrameLayout(this);
+        int iconBgSize = dp(40);
+        FrameLayout.LayoutParams iwLp = new FrameLayout.LayoutParams(iconBgSize, iconBgSize);
+        iconWrap.setLayoutParams(iwLp);
+
+        GradientDrawable iconBg = new GradientDrawable();
+        iconBg.setCornerRadius(dp(12));
+        iconBg.setColor(sel ? applyAlpha(accent, 0.18f) : (Ui.dark ? 0xFF2A2A2A : 0xFFF3F3F6));
+        iconWrap.setBackground(iconBg);
+
+        ImageView ic = Ui.icon(this, resId, 20, accent);
+        FrameLayout.LayoutParams icLp = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+        iconWrap.addView(ic, icLp);
+        r.addView(iconWrap);
+
+        // Текст
+        TextView labelTv = Ui.tv(this, label, 15, sel ? Ui.ACCENT : Ui.TEXT, sel);
+        labelTv.setPadding(dp(14), 0, 0, 0);
+        r.addView(labelTv, Ui.weight(1));
+
+        // Активный индикатор справа (точка)
+        if (sel) {
+            View dot = new View(this);
+            GradientDrawable dotBg = new GradientDrawable();
+            dotBg.setShape(GradientDrawable.OVAL);
+            dotBg.setColor(Ui.ACCENT);
+            dot.setBackground(dotBg);
+            int dotSize = dp(8);
+            r.addView(dot, new LinearLayout.LayoutParams(dotSize, dotSize));
+        }
+
+        // Ripple-эффект при нажатии
+        android.graphics.drawable.Drawable bg = r.getBackground();
+        final android.graphics.drawable.RippleDrawable ripple =
+            new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(applyAlpha(Ui.ACCENT, 0.10f)),
+                null,
+                null
+            );
+        r.setBackground(ripple);
+        r.setClickable(true);
+
         r.setOnClickListener(v -> {
+            // Мини-анимация нажатия
+            v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(80)
+                .withEndAction(() -> v.animate().scaleX(1f).scaleY(1f).setDuration(120).start())
+                .start();
             closeDrawer();
             if ("__settings".equals(target)) { pushSettings(); return; }
             if ("__about".equals(target)) { pushAbout(); return; }
@@ -285,8 +419,59 @@ public class MainActivity extends Activity {
         return r;
     }
 
+    /** Кнопка "+ Добавить" в drawer. */
+    View drawerAddItem(String label, Runnable action) {
+        LinearLayout r = Ui.row(this);
+        r.setPadding(dp(20), dp(12), dp(20), dp(12));
+        r.setGravity(Gravity.CENTER_VERTICAL);
+
+        FrameLayout iconWrap = new FrameLayout(this);
+        int iconBgSize = dp(40);
+        FrameLayout.LayoutParams iwLp = new FrameLayout.LayoutParams(iconBgSize, iconBgSize);
+        iconWrap.setLayoutParams(iwLp);
+        GradientDrawable iconBg = new GradientDrawable();
+        iconBg.setCornerRadius(dp(12));
+        iconBg.setStroke(dp(1), applyAlpha(Ui.ACCENT, 0.4f));
+        iconBg.setColor(0x00000000);
+        iconWrap.setBackground(iconBg);
+
+        ImageView plus = Ui.icon(this, R.drawable.ic_add, 20, Ui.ACCENT);
+        FrameLayout.LayoutParams plusLp = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+        iconWrap.addView(plus, plusLp);
+        r.addView(iconWrap);
+
+        TextView l = Ui.tv(this, label, 15, Ui.ACCENT);
+        l.setPadding(dp(14), 0, 0, 0);
+        r.addView(l, Ui.weight(1));
+
+        r.setOnClickListener(v -> action.run());
+        return r;
+    }
+
+    /** Применяет прозрачность к цвету (alpha 0..1). */
+    int applyAlpha(int color, float alpha) {
+        int a = (int) (alpha * 255);
+        return (a << 24) | (color & 0x00FFFFFF);
+    }
+
     void closeDrawer() {
-        if (drawerLayer != null) { root.removeView(drawerLayer); drawerLayer = null; }
+        if (drawerLayer == null) return;
+        final View panel = drawerLayer.getChildAt(0);
+        // Анимация закрытия: panel slide-out + затемнение fade-out.
+        drawerLayer.animate().alpha(0f).setDuration(220)
+            .withEndAction(() -> {
+                if (drawerLayer != null) {
+                    root.removeView(drawerLayer);
+                    drawerLayer = null;
+                }
+            })
+            .start();
+        if (panel != null) {
+            panel.animate().translationX(-dp(300))
+                .setDuration(260)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.4f))
+                .start();
+        }
     }
 
     // ================= PUSH / BACK =================
@@ -332,18 +517,22 @@ public class MainActivity extends Activity {
     // ================= HEADER =================
     LinearLayout topBar(String title, boolean hamburger, int rightIcon, Runnable onRight, Runnable onLeft) {
         LinearLayout tb = Ui.row(this);
-        tb.setPadding(dp(8), dp(8), dp(12), dp(8));
+        tb.setPadding(dp(8), dp(12), dp(12), dp(12));
         tb.setBackgroundColor(Ui.CARD);
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            tb.setElevation(dp(1));
+        }
         if (hamburger) {
-            ImageView ham = Ui.iconTouch(this, R.drawable.ic_menu, 40, Ui.TEXT);
+            ImageView ham = Ui.iconTouch(this, R.drawable.ic_menu, 44, Ui.TEXT);
             ham.setOnClickListener(v -> { if (onLeft != null) onLeft.run(); else openDrawer(); });
             tb.addView(ham);
         }
-        TextView ti = Ui.tv(this, title, 20, Ui.TEXT, true);
+        TextView ti = Ui.tv(this, title, 22, Ui.TEXT, true);
         ti.setPadding(dp(6), 0, dp(6), 0);
+        ti.setLetterSpacing(0.01f);
         tb.addView(ti, Ui.weight(1));
         if (rightIcon != 0) {
-            ImageView r = Ui.iconTouch(this, rightIcon, 40, Ui.ACCENT);
+            ImageView r = Ui.iconTouch(this, rightIcon, 44, Ui.ACCENT);
             r.setOnClickListener(v -> onRight.run());
             tb.addView(r);
         }
@@ -374,25 +563,33 @@ public class MainActivity extends Activity {
         col.addView(sv, lp);
         content.addView(col, new FrameLayout.LayoutParams(-1, -1));
         addFab();
+        // Лёгкая stagger-анимация появления карточек задач
+        Ui.staggerIn(list, 30, 280);
     }
 
     LinearLayout tasksHeader() {
         LinearLayout tb = Ui.row(this);
         tb.setBackgroundColor(Ui.CARD);
-        tb.setPadding(dp(6), dp(8), dp(6), dp(8));
-        ImageView ham = Ui.iconTouch(this, R.drawable.ic_menu, 40, Ui.TEXT);
+        tb.setPadding(dp(8), dp(12), dp(8), dp(12));
+        // Лёгкая тень для верхней панели
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            tb.setElevation(dp(1));
+        }
+        ImageView ham = Ui.iconTouch(this, R.drawable.ic_menu, 44, Ui.TEXT);
         ham.setOnClickListener(v -> openDrawer());
         tb.addView(ham);
         LinearLayout titles = Ui.col(this);
-        TextView ti = Ui.tv(this, viewTitle(), 21, Ui.TEXT, true);
+        TextView ti = Ui.tv(this, viewTitle(), 22, Ui.TEXT, true);
+        ti.setLetterSpacing(0.01f);
         titles.addView(ti);
         TextView sub = Ui.tv(this, todayLine(), 12, Ui.SUB);
+        sub.setPadding(0, dp(2), 0, 0);
         titles.addView(sub);
         tb.addView(titles, Ui.weight(1));
-        ImageView search = Ui.iconTouch(this, R.drawable.ic_search, 40, Ui.TEXT);
+        ImageView search = Ui.iconTouch(this, R.drawable.ic_search, 44, Ui.TEXT);
         search.setOnClickListener(v -> openSearch());
         tb.addView(search);
-        ImageView add = Ui.iconTouch(this, R.drawable.ic_add, 40, Ui.ACCENT);
+        ImageView add = Ui.iconTouch(this, R.drawable.ic_add, 44, Ui.ACCENT);
         add.setOnClickListener(v -> openEditorNew());
         tb.addView(add);
         return tb;
@@ -415,32 +612,61 @@ public class MainActivity extends Activity {
         }
         int total = remaining + doneToday;
         LinearLayout card = Ui.col(this);
-        card.setPadding(dp(16), dp(14), dp(16), dp(14));
-        card.setBackground(Ui.bg(this, Ui.CARD, 16));
+        card.setPadding(dp(18), dp(16), dp(18), dp(16));
+        card.setBackground(Ui.bg(this, Ui.CARD, 18));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(dp(16), dp(4), dp(16), dp(12));
         card.setLayoutParams(lp);
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            card.setElevation(dp(2));
+        }
         if (total == 0) {
             TextView t = Ui.tv(this, "Планов на сегодня нет", 14, Ui.SUB);
             card.addView(t);
             return card;
         }
         LinearLayout top = Ui.row(this);
-        top.addView(Ui.tv(this, "Прогресс дня", 14, Ui.TEXT, true), Ui.weight(1));
-        top.addView(Ui.tv(this, doneToday + " из " + total, 13, Ui.SUB));
+        top.addView(Ui.tv(this, "Прогресс дня", 15, Ui.TEXT, true), Ui.weight(1));
+        // Большой процент справа для эффекта
+        int pct = (int)(doneToday * 100L / total);
+        TextView pctTv = Ui.tv(this, pct + "%", 17, Ui.ACCENT, true);
+        top.addView(pctTv);
         card.addView(top);
-        card.addView(Ui.spacer(this, dp(10)));
+        card.addView(Ui.tv(this, doneToday + " из " + total + " выполнено сегодня", 12, Ui.SUB));
+        card.addView(Ui.spacer(this, dp(12)));
+        // Pill-shape прогресс-бар (Material 3 style)
         FrameLayout bar = new FrameLayout(this);
+        GradientDrawable barBg = new GradientDrawable();
+        barBg.setCornerRadius(dp(100));
+        barBg.setColor(Ui.ACCENT_SOFT);
         View bg = new View(this);
-        bg.setBackgroundColor(Ui.ACCENT_SOFT);
-        bar.addView(bg, new FrameLayout.LayoutParams(-1, dp(8)));
+        bg.setBackground(barBg);
+        bar.addView(bg, new FrameLayout.LayoutParams(-1, dp(10)));
         View fill = new View(this);
-        fill.setBackgroundColor(Ui.ACCENT);
-        int pct = total == 0 ? 0 : (int)(doneToday * 100L / total);
-        FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(0, dp(8));
-        fp.width = Math.max(dp(8), (int)((screenW() - dp(64)) * pct / 100f));
+        GradientDrawable fillBg = new GradientDrawable();
+        fillBg.setCornerRadius(dp(100));
+        fillBg.setColor(Ui.ACCENT);
+        fill.setBackground(fillBg);
+        FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(0, dp(10));
+        final int finalPct = pct;
+        final int finalBarW = (int)((screenW() - dp(72)) * pct / 100f);
+        fp.width = Math.max(dp(10), finalBarW);
         bar.addView(fill, fp);
         card.addView(bar);
+        // Анимация заполнения при появлении
+        if (android.os.Build.VERSION.SDK_INT >= 11) {
+            fill.postDelayed(() -> {
+                android.animation.ValueAnimator anim = android.animation.ValueAnimator.ofInt(0, finalBarW);
+                anim.setDuration(700);
+                anim.setInterpolator(new android.view.animation.DecelerateInterpolator());
+                anim.addUpdateListener(a -> {
+                        FrameLayout.LayoutParams ap = (FrameLayout.LayoutParams) fill.getLayoutParams();
+                        ap.width = Math.max(dp(10), (int)a.getAnimatedValue());
+                        fill.setLayoutParams(ap);
+                    });
+                anim.start();
+            }, 200);
+        }
         return card;
     }
 
@@ -674,21 +900,33 @@ public class MainActivity extends Activity {
 
     View taskRow(final Store.Task t) {
         LinearLayout card = Ui.col(this);
-        card.setPadding(dp(14), dp(8), dp(12), dp(8));
-        card.setBackground(Ui.bg(this, Ui.CARD, 14));
+        card.setPadding(dp(14), dp(10), dp(12), dp(10));
+        card.setBackground(Ui.bg(this, Ui.CARD, 16));
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.setMargins(dp(16), 0, dp(16), dp(8));
+        cp.setMargins(dp(16), dp(2), dp(16), dp(8));
         card.setLayoutParams(cp);
         if (t.dismissed == 1) card.setAlpha(0.55f);
+        // Лёгкая тень для карточки задачи (Material 3 style)
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            card.setElevation(dp(1));
+        }
 
         LinearLayout r = Ui.row(this);
+        // Material 3 чекбокс: filled circle для выполненных, ring для остальных.
+        // Размер увеличен до 26dp для лучшего тач-таргета.
         TextView check = Ui.tv(this, t.done == 1 ? "✓" : "", 14, Color.WHITE, true);
         check.setGravity(Gravity.CENTER);
-        int cs = dp(24);
-        check.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
-        check.setBackground(t.done == 1 ? Ui.oval(Ui.ACCENT) : Ui.ring(this, Ui.ACCENT, 2));
+        int cs = dp(26);
+        LinearLayout.LayoutParams checkLp = new LinearLayout.LayoutParams(cs, cs);
+        checkLp.setMargins(0, dp(1), dp(2), 0);
+        check.setLayoutParams(checkLp);
+        check.setBackground(t.done == 1 ? Ui.oval(Ui.ACCENT) : Ui.ring(this, Ui.ACCENT_SOFT2, 2));
         check.setOnClickListener(v -> {
             completeTask(t, t.done != 1);
+            // Лёгкая анимация клика
+            v.animate().scaleX(0.85f).scaleY(0.85f).setDuration(80)
+                .withEndAction(() -> v.animate().scaleX(1f).scaleY(1f).setDuration(120).start())
+                .start();
         });
         r.addView(check);
 
@@ -1200,13 +1438,21 @@ public class MainActivity extends Activity {
 
     // ================= FAB / QUICK ADD =================
     void addFab() {
-        ImageView fab = Ui.icon(this, R.drawable.ic_add, 28, Color.WHITE);
-        fab.setBackground(Ui.oval(Ui.ACCENT));
+        ImageView fab = Ui.icon(this, R.drawable.ic_add, 26, Color.WHITE);
+        GradientDrawable fabBg = Ui.oval(Ui.ACCENT);
+        fab.setBackground(fabBg);
         fab.setScaleType(ImageView.ScaleType.CENTER);
-        fab.setOnClickListener(v -> quickAdd());
-        FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.RIGHT | Gravity.BOTTOM);
-        fp.setMargins(0, 0, dp(18), dp(74));
+        // Material 3 elevation для FAB
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            fab.setElevation(dp(8));
+        }
+        fab.setOnClickListener(v -> { Ui.pulse(v); quickAdd(); });
+        // Увеличенный нижний отступ — чтобы FAB не перекрывался нижней навигацией.
+        // Навигация ~64dp высоты + 6dp margin = 70dp. Плюс "воздух" сверху — итого 88dp.
+        FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.RIGHT | Gravity.BOTTOM);
+        fp.setMargins(0, 0, dp(16), dp(88));
         fabLayer.addView(fab, fp);
+        Ui.popIn(fab);
     }
 
     void quickAdd() {
@@ -1377,34 +1623,82 @@ public class MainActivity extends Activity {
         fabLayer.removeAllViews();
         LinearLayout col = Ui.col(this);
 
+        // === TOPBAR с цветной кнопкой "Сегодня" по центру ===
         LinearLayout tb = Ui.row(this);
+        tb.setPadding(dp(8), dp(10), dp(8), dp(10));
         tb.setBackgroundColor(Ui.CARD);
-        tb.setPadding(dp(8), dp(10), dp(14), dp(10));
-        TextView prev = Ui.tv(this, "‹", 30, Ui.ACCENT);
-        prev.setPadding(dp(12), 0, dp(4), 0);
+        if (android.os.Build.VERSION.SDK_INT >= 21) tb.setElevation(dp(1));
+        tb.setGravity(Gravity.CENTER_VERTICAL);
+
+        // Кнопка меню слева
+        ImageView ham = Ui.iconTouch(this, R.drawable.ic_menu, 44, Ui.TEXT);
+        ham.setOnClickListener(v -> openDrawer());
+        tb.addView(ham);
+
+        // Стрелка назад
+        ImageView prev = Ui.iconTouch(this, R.drawable.ic_back, 44, Ui.ACCENT);
         prev.setOnClickListener(v -> { shiftCal(-1); calendarScreen(); });
+        LinearLayout.LayoutParams prevLp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        prevLp.setMargins(dp(2), 0, dp(2), 0);
+        prev.setLayoutParams(prevLp);
         tb.addView(prev);
-        TextView titleTv = Ui.tv(this, calTitle(), 20, Ui.TEXT, true);
+
+        // Заголовок
+        TextView titleTv = Ui.tv(this, calTitle(), 18, Ui.TEXT, true);
         titleTv.setGravity(Gravity.CENTER);
+        titleTv.setPadding(dp(4), 0, dp(4), 0);
+        titleTv.setLetterSpacing(0.01f);
         tb.addView(titleTv, Ui.weight(1));
-        TextView next = Ui.tv(this, "›", 30, Ui.ACCENT);
-        next.setPadding(dp(4), 0, dp(12), 0);
+
+        // Стрелка вперёд
+        ImageView next = Ui.iconTouch(this, R.drawable.ic_back, 44, Ui.ACCENT);
+        next.setRotation(180);
         next.setOnClickListener(v -> { shiftCal(1); calendarScreen(); });
+        LinearLayout.LayoutParams nextLp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        nextLp.setMargins(dp(2), 0, dp(2), 0);
+        next.setLayoutParams(nextLp);
         tb.addView(next);
-        TextView add = Ui.tv(this, "＋", 22, Ui.ACCENT);
-        add.setPadding(dp(10), dp(4), dp(2), dp(4));
+
+        // Кнопка добавления задачи (быстрый "+")
+        ImageView add = Ui.iconTouch(this, R.drawable.ic_add, 44, Ui.ACCENT);
         add.setOnClickListener(v -> { openEditorNew(); });
         tb.addView(add);
+
         col.addView(tb);
 
-        // mode switch
-        LinearLayout modes = Ui.row(this);
-        modes.setPadding(dp(16), dp(10), dp(16), dp(6));
-        modes.addView(calModePill("Месяц", 0), Ui.weight(1));
-        modes.addView(calModePill("Неделя", 1), Ui.weight(1));
-        modes.addView(calModePill("День", 2), Ui.weight(1));
-        col.addView(modes);
+        // === Сегмент-контрол для режима (Material 3) ===
+        LinearLayout segWrap = Ui.row(this);
+        segWrap.setPadding(dp(16), dp(12), dp(16), dp(8));
 
+        LinearLayout seg = Ui.row(this);
+        seg.setBackground(Ui.bg(this, Ui.CARD2, 14));
+        seg.setPadding(dp(4), dp(4), dp(4), dp(4));
+        seg.addView(calModePill("Месяц", 0), Ui.weight(1));
+        seg.addView(calModePill("Неделя", 1), Ui.weight(1));
+        seg.addView(calModePill("День", 2), Ui.weight(1));
+        segWrap.addView(seg, Ui.weight(1));
+        col.addView(segWrap);
+
+        // === Кнопка "Сегодня" для быстрого возврата ===
+        LinearLayout todayRow = Ui.row(this);
+        todayRow.setPadding(dp(16), 0, dp(16), dp(4));
+        todayRow.setGravity(Gravity.LEFT);
+
+        TextView todayPill = Ui.tv(this, "Сегодня", 13, Ui.ACCENT, true);
+        todayPill.setPadding(dp(14), dp(8), dp(14), dp(8));
+        GradientDrawable todayBg = new GradientDrawable();
+        todayBg.setCornerRadius(dp(20));
+        todayBg.setColor(applyAlpha(Ui.ACCENT, 0.12f));
+        todayPill.setBackground(todayBg);
+        todayPill.setOnClickListener(v -> {
+            calSel = Calendar.getInstance();
+            calMonth = (Calendar) calSel.clone();
+            calendarScreen();
+        });
+        todayRow.addView(todayPill);
+        col.addView(todayRow);
+
+        // === Контент в зависимости от режима ===
         ScrollView sv = Ui.scroll(this);
         LinearLayout body = Ui.col(this);
         if (calMode == 0) { body.addView(buildMonthGrid()); body.addView(buildDayAgenda()); }
@@ -1448,12 +1742,24 @@ public class MainActivity extends Activity {
         return c;
     }
 
+    /** Material 3 segmented button для выбора режима календаря. */
     TextView calModePill(String label, int id) {
-        TextView t = Ui.tv(this, label, 13, calMode == id ? Color.WHITE : Ui.SUB);
+        TextView t = Ui.tv(this, label, 13, calMode == id ? Color.WHITE : Ui.TEXT, calMode == id);
         t.setGravity(Gravity.CENTER);
         t.setPadding(dp(8), dp(9), dp(8), dp(9));
-        t.setBackground(Ui.bg(this, calMode == id ? Ui.ACCENT : Ui.CARD2, 10));
-        t.setOnClickListener(v -> { calMode = id; calendarScreen(); });
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(10));
+        bg.setColor(calMode == id ? Ui.ACCENT : 0x00000000);
+        t.setBackground(bg);
+        final TextView tv = t;
+        t.setOnClickListener(v -> {
+            // Маленькая press-анимация
+            v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(80)
+                .withEndAction(() -> v.animate().scaleX(1f).scaleY(1f).setDuration(120).start())
+                .start();
+            calMode = id;
+            calendarScreen();
+        });
         return t;
     }
 
@@ -1598,20 +1904,46 @@ public class MainActivity extends Activity {
         ScrollView sv = Ui.scroll(this);
         LinearLayout body = Ui.col(this);
         body.setGravity(Gravity.CENTER_HORIZONTAL);
-        body.setPadding(dp(20), dp(40), dp(20), dp(20));
+        body.setPadding(dp(20), dp(24), dp(20), dp(20));
 
         focusHintTv = Ui.tv(this, "Помодоро", 14, Ui.SUB);
         focusHintTv.setGravity(Gravity.CENTER);
         body.addView(focusHintTv);
+        body.addView(Ui.spacer(this, dp(16)));
 
-        focusTimeTv = Ui.tv(this, fmt(focusRemain), 54, Ui.TEXT, true);
+        // Круговой индикатор фокуса (Material 3 circular progress style)
+        int ringSize = dp(240);
+        FrameLayout ringFrame = new FrameLayout(this);
+        LinearLayout.LayoutParams rfp = new LinearLayout.LayoutParams(ringSize, ringSize);
+        rfp.gravity = Gravity.CENTER;
+        ringFrame.setLayoutParams(rfp);
+        View track = new View(this);
+        GradientDrawable trackBg = new GradientDrawable();
+        trackBg.setShape(GradientDrawable.OVAL);
+        trackBg.setStroke(dp(8), Ui.ACCENT_SOFT);
+        track.setBackground(trackBg);
+        FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(ringSize, ringSize);
+        track.setLayoutParams(tlp);
+        ringFrame.addView(track);
+        // Внутренний круг белый (или темный)
+        View inner = new View(this);
+        GradientDrawable innerBg = new GradientDrawable();
+        innerBg.setShape(GradientDrawable.OVAL);
+        innerBg.setColor(Ui.CARD);
+        inner.setBackground(innerBg);
+        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(ringSize - dp(16), ringSize - dp(16), Gravity.CENTER);
+        ringFrame.addView(inner, ilp);
+        // Текст таймера по центру
+        focusTimeTv = Ui.tv(this, fmt(focusRemain), 48, Ui.TEXT, true);
         focusTimeTv.setGravity(Gravity.CENTER);
-        body.addView(Ui.spacer(this, dp(10)));
-        body.addView(focusTimeTv);
+        FrameLayout.LayoutParams tlp2 = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
+        ringFrame.addView(focusTimeTv, tlp2);
+        body.addView(ringFrame);
+        body.addView(Ui.spacer(this, dp(24)));
 
         // mode pills
         LinearLayout modes = Ui.row(this);
-        modes.setPadding(0, dp(24), 0, dp(8));
+        modes.setPadding(0, dp(8), 0, dp(8));
         modes.addView(modePill("Фокус", 25), Ui.weight(1));
         modes.addView(modePill("Перерыв", 5), Ui.weight(1));
         modes.addView(modePill("Длинный", 15), Ui.weight(1));
@@ -1629,7 +1961,7 @@ public class MainActivity extends Activity {
         btns.addView(reset, Ui.weight(1));
         body.addView(btns);
 
-        body.addView(Ui.spacer(this, dp(30)));
+        body.addView(Ui.spacer(this, dp(24)));
         body.addView(Ui.tv(this, "Таймер Помодоро помогает сосредоточиться\nи не отвлекаться на посторонние дела.", 13, Ui.SUB));
 
         sv.addView(body);
@@ -1713,91 +2045,165 @@ public class MainActivity extends Activity {
         LinearLayout list = Ui.col(this);
         list.setPadding(dp(16), dp(12), dp(16), dp(20));
         if (habits.isEmpty()) {
-            TextView e = Ui.tv(this, "Создайте привычку\nнапример, читать или делать зарядку", 16, Ui.SUB);
+            // Пустое состояние с иконкой
+            LinearLayout emptyWrap = Ui.col(this);
+            emptyWrap.setGravity(Gravity.CENTER);
+            emptyWrap.setPadding(0, dp(60), 0, dp(40));
+
+            FrameLayout iconWrap = new FrameLayout(this);
+            GradientDrawable iconBg = new GradientDrawable();
+            iconBg.setCornerRadius(dp(100));
+            iconBg.setColor(applyAlpha(Ui.ACCENT, 0.10f));
+            iconWrap.setBackground(iconBg);
+            int iconBgSize = dp(80);
+            FrameLayout.LayoutParams iwLp = new FrameLayout.LayoutParams(iconBgSize, iconBgSize);
+            iwLp.gravity = Gravity.CENTER;
+            iconWrap.setLayoutParams(iwLp);
+            ImageView eIc = Ui.icon(this, R.drawable.ic_habit, 40, Ui.ACCENT);
+            FrameLayout.LayoutParams eIcLp = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+            iconWrap.addView(eIc, eIcLp);
+            emptyWrap.addView(iconWrap);
+
+            TextView e = Ui.tv(this, "Создайте привычку\nнапример, читать или делать зарядку", 15, Ui.SUB);
             e.setGravity(Gravity.CENTER);
-            e.setPadding(dp(30), dp(80), dp(30), dp(40));
-            list.addView(e);
+            e.setPadding(dp(30), dp(20), dp(30), 0);
+            emptyWrap.addView(e);
+
+            TextView hint = Ui.tv(this, "Нажмите ＋  справа вверху", 13, Ui.FAINT);
+            hint.setGravity(Gravity.CENTER);
+            hint.setPadding(0, dp(8), 0, 0);
+            emptyWrap.addView(hint);
+            list.addView(emptyWrap);
         }
-        for (Store.Habit h : habits) list.addView(habitRow(h));
+        for (int i = 0; i < habits.size(); i++) list.addView(habitRow(habits.get(i), i));
         sv.addView(list);
         col.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
         content.addView(col, new FrameLayout.LayoutParams(-1, -1));
+        // Stagger-анимация карточек привычек
+        if (!habits.isEmpty()) Ui.staggerIn(list, 40, 300);
     }
 
-    View habitRow(final Store.Habit h) {
+    View habitRow(final Store.Habit h, int index) {
         LinearLayout card = Ui.col(this);
-        card.setPadding(dp(16), dp(12), dp(16), dp(12));
-        card.setBackground(Ui.bg(this, Ui.CARD, 16));
+        card.setPadding(dp(16), dp(14), dp(16), dp(14));
+        if (android.os.Build.VERSION.SDK_INT >= 21) card.setElevation(dp(1));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(10));
         card.setLayoutParams(lp);
+        card.setClickable(true);
+
+        // Ripple + фон
+        final android.graphics.drawable.RippleDrawable ripple =
+            new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(applyAlpha(h.color, 0.16f)),
+                null, null
+            );
+        card.setBackground(ripple);
 
         LinearLayout top = Ui.row(this);
-        TextView dot = Ui.tv(this, "●", 14, h.color);
-        top.addView(dot);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        // Цветная точка в круге
+        FrameLayout dotWrap = new FrameLayout(this);
+        GradientDrawable dotBg = new GradientDrawable();
+        dotBg.setShape(GradientDrawable.OVAL);
+        dotBg.setColor(applyAlpha(h.color, 0.16f));
+        dotWrap.setBackground(dotBg);
+        int dotSize = dp(36);
+        FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(dotSize, dotSize);
+        dotWrap.setLayoutParams(dotLp);
+        View dot = new View(this);
+        GradientDrawable dotInner = new GradientDrawable();
+        dotInner.setShape(GradientDrawable.OVAL);
+        dotInner.setColor(h.color);
+        FrameLayout.LayoutParams dotInnerLp = new FrameLayout.LayoutParams(dp(12), dp(12), Gravity.CENTER);
+        dotWrap.addView(dot, dotInnerLp);
+        top.addView(dotWrap);
+
+        LinearLayout nameCol = Ui.col(this);
+        nameCol.setPadding(dp(14), 0, 0, 0);
         TextView name = Ui.tv(this, h.name, 16, Ui.TEXT, true);
-        name.setPadding(dp(8), 0, 0, 0);
-        top.addView(name, Ui.weight(1));
+        nameCol.addView(name);
+        // Сегодняшний день в виде маленького чипа
+        LinearLayout tagRow = Ui.row(this);
+        tagRow.setPadding(0, dp(4), 0, 0);
+        String done = habitDoneToday(h.id) ? "✓ Сегодня" : "○ Сегодня";
+        int doneColor = habitDoneToday(h.id) ? h.color : Ui.SUB;
+        TextView todayChip = Ui.tv(this, done, 11, doneColor, true);
+        tagRow.addView(todayChip);
+        int total = habitTotalDays(h.id);
+        if (total > 0) {
+            TextView totalTv = Ui.tv(this, "  ·  " + total + " дн.", 11, Ui.SUB);
+            tagRow.addView(totalTv);
+        }
+        nameCol.addView(tagRow);
+        top.addView(nameCol, Ui.weight(1));
+
+        // Streak-индикатор справа
         int streak = habitStreak(h.id);
         if (streak > 0) {
-            TextView st = Ui.tv(this, "🔥 " + streak, 13, Ui.ORANGE, true);
-            st.setPadding(dp(8), 0, dp(4), 0);
-            top.addView(st);
+            LinearLayout streakWrap = Ui.col(this);
+            streakWrap.setGravity(Gravity.CENTER);
+            streakWrap.setPadding(dp(8), dp(6), dp(4), dp(6));
+            GradientDrawable streakBg = new GradientDrawable();
+            streakBg.setCornerRadius(dp(12));
+            streakBg.setColor(applyAlpha(Ui.ORANGE, 0.14f));
+            streakWrap.setBackground(streakBg);
+            TextView flame = Ui.tv(this, "🔥", 18, Ui.ORANGE);
+            flame.setGravity(Gravity.CENTER);
+            streakWrap.addView(flame);
+            TextView st = Ui.tv(this, String.valueOf(streak), 13, Ui.ORANGE, true);
+            st.setGravity(Gravity.CENTER);
+            streakWrap.addView(st);
+            top.addView(streakWrap);
         }
-        ImageView del = Ui.iconTouch(this, R.drawable.ic_delete, 36, Ui.FAINT);
-        del.setOnClickListener(v -> {
-            new AlertDialog.Builder(this).setMessage("Удалить привычку «" + h.name + "»?")
-                .setPositiveButton("Удалить", (x, y) -> { store.deleteHabit(h.id); reload(); habitsScreen(); })
-                .setNegativeButton("Отмена", null).show();
-        });
-        top.addView(del);
+
         card.addView(top);
 
         if (h.notes != null && h.notes.length() > 0) {
-            TextView note = Ui.tv(this, "💬 " + h.notes, 13, Ui.SUB);
-            note.setPadding(dp(20), dp(4), 0, 0);
-            card.addView(note);
+            TextView notes = Ui.tv(this, h.notes, 12, Ui.SUB);
+            notes.setPadding(0, dp(8), 0, 0);
+            card.addView(notes);
         }
 
-        LinearLayout editHint = Ui.row(this);
-        editHint.setPadding(dp(20), dp(6), 0, 0);
-        ImageView edIcon = Ui.icon(this, R.drawable.ic_edit, 14, Ui.SUB);
-        editHint.addView(edIcon);
-        TextView edText = Ui.tv(this, "Изменить / комментарий", 12, Ui.SUB);
-        edText.setPadding(dp(6), 0, 0, 0);
-        editHint.addView(edText);
-        editHint.setOnClickListener(v -> editHabit(h));
-        card.addView(editHint);
+        // Кнопка отметки выполнения
+        LinearLayout markBtn = Ui.row(this);
+        markBtn.setPadding(0, dp(10), 0, 0);
+        TextView btn = Ui.tv(this, habitDoneToday(h.id) ? "Отменить отметку" : "Отметить выполнение", 14, Color.WHITE, true);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(dp(16), dp(10), dp(16), dp(10));
+        btn.setBackground(Ui.bg(this, habitDoneToday(h.id) ? Ui.SUB : h.color, 12));
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, -2);
+        markBtn.addView(btn, btnLp);
+        card.addView(markBtn);
+        btn.setOnClickListener(v -> {
+            v.animate().scaleX(0.95f).scaleY(0.95f).setDuration(80)
+                .withEndAction(() -> {
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+                    toggleHabitToday(h);
+                    habitsScreen();
+                }).start();
+        });
 
-        // last 7 days
-        LinearLayout week = Ui.row(this);
-        week.setPadding(0, dp(12), 0, 0);
-        Calendar c = Calendar.getInstance();
-        long today = Store.todayStart();
-        for (int i = 6; i >= 0; i--) {
-            final long day = Store.addDays(today, -i);
-            final String ds = Store.dateStr(day);
-            boolean checked = store.habitChecked(h.id, ds);
-            LinearLayout cell = Ui.col(this);
-            cell.setGravity(Gravity.CENTER);
-            TextView cir = Ui.tv(this, checked ? "✓" : "", 11, Color.WHITE, true);
-            cir.setGravity(Gravity.CENTER);
-            int cs = dp(26);
-            cir.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
-            cir.setBackground(checked ? Ui.oval(h.color) : Ui.stroke(this, Ui.BORDER, 1, 20));
-            cir.setOnClickListener(v -> {
-                boolean nv = !store.habitChecked(h.id, ds);
-                store.setHabitChecked(h.id, ds, nv);
-                habitsScreen();
-            });
-            cell.addView(cir);
-            TextView wd = Ui.tv(this, Store.weekdayShort(day), 9, Ui.SUB);
-            wd.setGravity(Gravity.CENTER);
-            cell.addView(wd);
-            week.addView(cell, Ui.weight(1));
-        }
-        card.addView(week);
+        // Ripple клик по карточке — открыть редактор
+        card.setOnClickListener(v -> editHabit(h));
         return card;
+    }
+
+    boolean habitDoneToday(long habitId) {
+        long today = Store.todayStart();
+        return store.habitDoneAt(habitId, today);
+    }
+
+    int habitTotalDays(long habitId) {
+        return store.habitTotalDays(habitId);
+    }
+
+    void toggleHabitToday(Store.Habit h) {
+        long today = Store.todayStart();
+        if (habitDoneToday(h.id)) store.removeHabitMark(h.id, today);
+        else store.addHabitMark(h.id, today);
+        reload();
     }
 
     int habitStreak(long habitId) {
@@ -1894,44 +2300,97 @@ public class MainActivity extends Activity {
         col.addView(topBar("Ещё", false, 0, null, null));
         ScrollView sv = Ui.scroll(this);
         LinearLayout body = Ui.col(this);
-        body.setPadding(dp(16), dp(16), dp(16), dp(20));
+        body.setPadding(dp(16), dp(8), dp(16), dp(20));
 
-        // profile card
-        LinearLayout prof = Ui.row(this);
+        // === Профильная карточка с градиентом ===
+        LinearLayout prof = Ui.col(this);
         prof.setPadding(dp(20), dp(20), dp(20), dp(20));
-        prof.setBackground(Ui.bg(this, Ui.CARD, 18));
-        TextView av = Ui.tv(this, "Р", 26, Color.WHITE, true);
+        GradientDrawable profBg = new GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            new int[]{ Ui.ACCENT, darken(Ui.ACCENT) }
+        );
+        profBg.setCornerRadius(dp(20));
+        prof.setBackground(profBg);
+        if (android.os.Build.VERSION.SDK_INT >= 21) prof.setElevation(dp(2));
+        LinearLayout.LayoutParams profLp = new LinearLayout.LayoutParams(-1, -2);
+        profLp.setMargins(0, dp(8), 0, dp(8));
+        prof.setLayoutParams(profLp);
+
+        LinearLayout profRow = Ui.row(this);
+        // Аватар с белым кругом-обводкой
+        FrameLayout avatarWrap = new FrameLayout(this);
+        GradientDrawable avatarBorder = new GradientDrawable();
+        avatarBorder.setShape(GradientDrawable.OVAL);
+        avatarBorder.setColor(0x33FFFFFF);
+        avatarWrap.setBackground(avatarBorder);
+        int avSize = dp(60);
+        FrameLayout.LayoutParams avLp = new FrameLayout.LayoutParams(avSize, avSize);
+        avatarWrap.setLayoutParams(avLp);
+
+        FrameLayout avatarInner = new FrameLayout(this);
+        GradientDrawable avatarBg = new GradientDrawable();
+        avatarBg.setShape(GradientDrawable.OVAL);
+        avatarBg.setColor(0xFFFFFFFF);
+        FrameLayout.LayoutParams innerLp = new FrameLayout.LayoutParams(avSize - dp(4), avSize - dp(4), Gravity.CENTER);
+        avatarWrap.addView(avatarInner, innerLp);
+
+        TextView av = Ui.tv(this, "Р", 26, Ui.ACCENT, true);
         av.setGravity(Gravity.CENTER);
-        av.setBackground(Ui.oval(Ui.ACCENT));
-        int as = dp(56);
-        av.setLayoutParams(new LinearLayout.LayoutParams(as, as));
-        prof.addView(av);
+        FrameLayout.LayoutParams avTv = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+        avatarInner.addView(av, avTv);
+        profRow.addView(avatarWrap);
+
         LinearLayout pn = Ui.col(this);
         pn.setPadding(dp(14), 0, 0, 0);
-        pn.addView(Ui.tv(this, "РыбинскLAB", 18, Ui.TEXT, true));
-        pn.addView(Ui.tv(this, "rybinsklab.ru", 13, Ui.ACCENT));
-        pn.addView(Ui.tv(this, "Продуктивность и задачи", 12, Ui.SUB));
-        prof.addView(pn, Ui.weight(1));
+        TextView nm = Ui.tv(this, "РыбинскLAB", 19, Color.WHITE, true);
+        nm.setShadowLayer(2f, 0, 1, 0x40000000);
+        pn.addView(nm);
+        TextView sub = Ui.tv(this, "rybinsklab.ru", 13, 0xE6FFFFFF);
+        sub.setPadding(0, dp(2), 0, 0);
+        pn.addView(sub);
+        TextView tg = Ui.tv(this, "Продуктивность и задачи", 12, 0xCCFFFFFF);
+        tg.setPadding(0, dp(6), 0, 0);
+        pn.addView(tg);
+        profRow.addView(pn, Ui.weight(1));
+        prof.addView(profRow);
+
+        TextView badge = Ui.tv(this, "v 3.0  ·  Material 3", 11, 0xCCFFFFFF);
+        badge.setPadding(0, dp(10), 0, 0);
+        prof.addView(badge);
         body.addView(prof);
 
-        // statistics
-        body.addView(Ui.spacer(this, dp(16)));
-        TextView sh = Ui.tv(this, "Статистика", 14, Ui.SUB, true);
-        sh.setPadding(dp(8), 0, dp(8), dp(8));
-        body.addView(sh);
+        // === Блок статистики (с подзаголовком) ===
+        body.addView(makeSectionTitle("СТАТИСТИКА"));
         LinearLayout stats = Ui.row(this);
-        stats.addView(statCard("Всего задач", countAll()), Ui.weight(1));
-        stats.addView(statCard("Выполнено", countDone()), Ui.weight(1));
-        stats.addView(statCard("Сегодня", countToday()), Ui.weight(1));
+        stats.addView(statCard("Всего задач", countAll(), R.drawable.ic_tasks, Ui.ACCENT), Ui.weight(1));
+        stats.addView(statCard("Выполнено", countDone(), R.drawable.ic_done_all, Ui.GREEN), Ui.weight(1));
+        stats.addView(statCard("Сегодня", countToday(), R.drawable.ic_today, Ui.ORANGE), Ui.weight(1));
         body.addView(stats);
 
-        // menu
-        body.addView(Ui.spacer(this, dp(16)));
+        // === Меню действий ===
+        body.addView(makeSectionTitle("УПРАВЛЕНИЕ"));
         body.addView(menuCard());
+
+        // === Подвал с брендингом ===
+        body.addView(Ui.spacer(this, dp(20)));
+        TextView footer = Ui.tv(this, "Полностью офлайн  ·  Без рекламы  ·  Open Source (MIT)", 11, Ui.SUB);
+        footer.setGravity(Gravity.CENTER);
+        body.addView(footer);
 
         sv.addView(body);
         col.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
         content.addView(col, new FrameLayout.LayoutParams(-1, -1));
+
+        // Лёгкая stagger-анимация: карточки появляются с задержкой.
+        Ui.staggerIn(body, 25, 280);
+    }
+
+    /** Заголовок секции в стиле Material 3 (uppercase, мелкий). */
+    TextView makeSectionTitle(String text) {
+        TextView t = Ui.tv(this, text, 11, Ui.SUB, true);
+        t.setPadding(dp(8), dp(16), dp(8), dp(8));
+        t.setLetterSpacing(0.12f);
+        return t;
     }
 
     int countAll() { int n = 0; for (Store.Task t : tasks) if (t.parent == null) n++; return n; }
@@ -1942,44 +2401,109 @@ public class MainActivity extends Activity {
         return n;
     }
 
-    View statCard(String label, int value) {
+    View statCard(String label, int value, int iconRes, int iconColor) {
         LinearLayout c = Ui.col(this);
-        c.setGravity(Gravity.CENTER);
+        c.setGravity(Gravity.CENTER_HORIZONTAL);
         c.setPadding(dp(8), dp(16), dp(8), dp(16));
         c.setBackground(Ui.bg(this, Ui.CARD, 18));
-        TextView vv = Ui.tv(this, String.valueOf(value), 26, Ui.ACCENT, true);
+        if (android.os.Build.VERSION.SDK_INT >= 21) c.setElevation(dp(1));
+        // Иконка
+        FrameLayout iconWrap = new FrameLayout(this);
+        GradientDrawable iconBg = new GradientDrawable();
+        iconBg.setCornerRadius(dp(12));
+        iconBg.setColor(applyAlpha(iconColor, 0.14f));
+        iconWrap.setBackground(iconBg);
+        int iconBgSize = dp(40);
+        FrameLayout.LayoutParams iwLp = new FrameLayout.LayoutParams(iconBgSize, iconBgSize);
+        iconWrap.setLayoutParams(iwLp);
+        ImageView icon = Ui.icon(this, iconRes, 22, iconColor);
+        FrameLayout.LayoutParams iconLp = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+        iconWrap.addView(icon, iconLp);
+        c.addView(iconWrap);
+
+        TextView vv = Ui.tv(this, String.valueOf(value), 24, Ui.TEXT, true);
         vv.setGravity(Gravity.CENTER);
+        vv.setPadding(0, dp(6), 0, 0);
         c.addView(vv);
         TextView ll = Ui.tv(this, label, 11, Ui.SUB);
         ll.setGravity(Gravity.CENTER);
+        ll.setPadding(0, dp(2), 0, 0);
         c.addView(ll);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
-        lp.setMargins(dp(3), 0, dp(3), 0);
+        lp.setMargins(dp(4), 0, dp(4), 0);
         c.setLayoutParams(lp);
         return c;
     }
 
     View menuCard() {
         LinearLayout box = Ui.col(this);
-        box.setPadding(dp(6), dp(4), dp(6), dp(4));
         box.setBackground(Ui.bg(this, Ui.CARD, 18));
-        box.addView(menuItem(R.drawable.ic_chart, "Подробная статистика", "stats"));
-        box.addView(menuItem(R.drawable.ic_settings, "Настройки", "s"));
-        box.addView(menuItem(R.drawable.ic_theme, Ui.dark ? "Светлая тема" : "Тёмная тема", "theme"));
-        box.addView(menuItem(R.drawable.ic_info, "О приложении", "a"));
-        box.addView(menuItem(R.drawable.ic_language, "Сайт разработчика", "site"));
-        box.addView(menuItem(R.drawable.ic_star, "Оценить приложение", "rate"));
+        if (android.os.Build.VERSION.SDK_INT >= 21) box.setElevation(dp(1));
+        box.addView(menuItem(R.drawable.ic_chart, "Подробная статистика", "stats", Ui.ACCENT));
+        box.addView(menuDivider());
+        box.addView(menuItem(R.drawable.ic_settings, "Настройки", "s", Ui.ORANGE));
+        box.addView(menuDivider());
+        box.addView(menuItem(R.drawable.ic_theme, Ui.dark ? "Светлая тема" : "Тёмная тема", "theme", Ui.BLUE));
+        box.addView(menuDivider());
+        box.addView(menuItem(R.drawable.ic_info, "О приложении", "a", Ui.SUB));
+        box.addView(menuDivider());
+        box.addView(menuItem(R.drawable.ic_language, "Сайт разработчика", "site", Ui.GREEN));
+        box.addView(menuDivider());
+        box.addView(menuItem(R.drawable.ic_star, "Оценить приложение", "rate", Ui.ORANGE));
         return box;
     }
 
-    View menuItem(int resId, String label, final String action) {
+    /** Разделитель между пунктами меню (Material 3 inset divider). */
+    View menuDivider() {
+        View d = new View(this);
+        d.setBackgroundColor(Ui.DIVIDER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 1);
+        lp.setMargins(dp(64), 0, dp(20), 0);
+        d.setLayoutParams(lp);
+        return d;
+    }
+
+    View menuItem(int resId, String label, final String action, int iconColor) {
         LinearLayout r = Ui.row(this);
-        r.setPadding(dp(14), dp(14), dp(14), dp(14));
-        ImageView ic = Ui.icon(this, resId, 22, Ui.ACCENT);
-        r.addView(ic);
-        r.addView(Ui.tv(this, label, 16, Ui.TEXT), Ui.weight(1));
-        r.addView(Ui.tv(this, "›", 22, Ui.FAINT));
-        r.setOnClickListener(v -> onMenu(action));
+        r.setPadding(dp(20), dp(14), dp(20), dp(14));
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setClickable(true);
+
+        // Иконка в квадрате с цветным фоном
+        FrameLayout iconWrap = new FrameLayout(this);
+        GradientDrawable iconBg = new GradientDrawable();
+        iconBg.setCornerRadius(dp(10));
+        iconBg.setColor(applyAlpha(iconColor, 0.14f));
+        iconWrap.setBackground(iconBg);
+        int iconBgSize = dp(36);
+        FrameLayout.LayoutParams iwLp = new FrameLayout.LayoutParams(iconBgSize, iconBgSize);
+        iconWrap.setLayoutParams(iwLp);
+        ImageView ic = Ui.icon(this, resId, 20, iconColor);
+        FrameLayout.LayoutParams icLp = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+        iconWrap.addView(ic, icLp);
+        r.addView(iconWrap);
+
+        r.addView(Ui.tv(this, label, 15, Ui.TEXT), Ui.weight(1));
+        // Стрелка-шеврон справа (можно тоже как иконку)
+        ImageView chevron = Ui.icon(this, R.drawable.ic_back, 16, Ui.FAINT);
+        chevron.setRotation(180);
+        chevron.setAlpha(0.6f);
+        r.addView(chevron);
+
+        // Ripple
+        final android.graphics.drawable.RippleDrawable ripple =
+            new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(applyAlpha(Ui.ACCENT, 0.10f)),
+                null, null
+            );
+        r.setBackground(ripple);
+
+        r.setOnClickListener(v -> {
+            v.animate().scaleX(0.98f).scaleY(0.98f).setDuration(80)
+                .withEndAction(() -> v.animate().scaleX(1f).scaleY(1f).setDuration(120).start())
+                .start();
+            onMenu(action);
+        });
         return r;
     }
 
@@ -2010,9 +2534,9 @@ public class MainActivity extends Activity {
 
         // totals
         LinearLayout stats = Ui.row(this);
-        stats.addView(statCard("Всего", countAll()), Ui.weight(1));
-        stats.addView(statCard("Выполнено", countDone()), Ui.weight(1));
-        stats.addView(statCard("Активно", countAll() - countDone()), Ui.weight(1));
+        stats.addView(statCard("Всего", countAll(), R.drawable.ic_tasks, Ui.ACCENT), Ui.weight(1));
+        stats.addView(statCard("Выполнено", countDone(), R.drawable.ic_done_all, Ui.GREEN), Ui.weight(1));
+        stats.addView(statCard("Активно", countAll() - countDone(), R.drawable.ic_today, Ui.ORANGE), Ui.weight(1));
         body.addView(stats);
 
         body.addView(Ui.spacer(this, dp(20)));
