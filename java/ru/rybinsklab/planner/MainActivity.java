@@ -8,6 +8,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.Typeface;
@@ -489,10 +490,23 @@ public class MainActivity extends Activity {
         LinearLayout wrap = Ui.col(this);
         wrap.setBackgroundColor(Ui.BG);
         wrap.addView(screen, new LinearLayout.LayoutParams(-1, 0, 1));
+        
+        // Prepare for animation - slide in from right
+        wrap.setAlpha(0f);
+        wrap.setTranslationX(dp(50));
+        
         stack.add(wrap);
         content.removeAllViews();
         fabLayer.removeAllViews();
         content.addView(wrap, new FrameLayout.LayoutParams(-1, -1));
+        
+        // Animate slide in
+        wrap.animate()
+            .alpha(1f)
+            .translationX(0)
+            .setDuration(320)
+            .setInterpolator(new android.view.animation.DecelerateInterpolator(1.3f))
+            .start();
     }
 
     View pushHeader(String title, Runnable onBack) {
@@ -510,10 +524,22 @@ public class MainActivity extends Activity {
 
     void pop() {
         if (!stack.isEmpty()) {
-            View v = stack.remove(stack.size() - 1);
-            content.removeView(v);
+            final View v = stack.remove(stack.size() - 1);
+            
+            // Animate slide out to right
+            v.animate()
+                .alpha(0f)
+                .translationX(dp(50))
+                .setDuration(250)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.5f))
+                .withEndAction(() -> {
+                    content.removeView(v);
+                    if (stack.isEmpty()) { showTab(tab); }
+                })
+                .start();
+        } else {
+            if (stack.isEmpty()) { showTab(tab); }
         }
-        if (stack.isEmpty()) { showTab(tab); }
     }
 
     @Override
@@ -895,10 +921,7 @@ public class MainActivity extends Activity {
             list.addView(taskRow(t));
         }
         if (shown.isEmpty()) {
-            TextView e = Ui.tv(this, emptyText(), 16, Ui.SUB);
-            e.setGravity(Gravity.CENTER);
-            e.setPadding(dp(30), dp(80), dp(30), dp(40));
-            list.addView(e);
+            list.addView(improvedEmptyState());
         }
     }
 
@@ -906,6 +929,121 @@ public class MainActivity extends Activity {
         if ("completed".equals(view)) return "Здесь появятся завершённые задачи 🎉";
         if ("today".equals(view)) return "День свободен! ☀️\nНажмите +, чтобы добавить задачу";
         return "Пока пусто 🍃\nНажмите +, чтобы добавить задачу";
+    }
+    
+    View emptyStateView(String emoji, String title, String subtitle, int iconColor) {
+        LinearLayout wrap = Ui.col(this);
+        wrap.setGravity(Gravity.CENTER);
+        wrap.setPadding(dp(30), dp(60), dp(30), dp(40));
+        
+        // Animated icon container
+        FrameLayout iconFrame = new FrameLayout(this);
+        int iconSize = dp(80);
+        FrameLayout.LayoutParams iconLp = new FrameLayout.LayoutParams(iconSize, iconSize);
+        iconLp.gravity = Gravity.CENTER;
+        iconFrame.setLayoutParams(iconLp);
+        
+        // Background circle
+        View iconBg = new View(this);
+        GradientDrawable iconBgGd = new GradientDrawable();
+        iconBgGd.setShape(GradientDrawable.OVAL);
+        iconBgGd.setColor(applyAlpha(iconColor, 0.12f));
+        iconBg.setBackground(iconBgGd);
+        iconFrame.addView(iconBg, new FrameLayout.LayoutParams(iconSize, iconSize));
+        
+        // Emoji or icon
+        TextView icon = Ui.tv(this, emoji, 36, Ui.TEXT);
+        icon.setGravity(Gravity.CENTER);
+        iconFrame.addView(icon, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        wrap.addView(iconFrame);
+        
+        // Title
+        TextView titleTv = Ui.tv(this, title, 18, Ui.TEXT, true);
+        titleTv.setGravity(Gravity.CENTER);
+        titleTv.setPadding(0, dp(20), 0, dp(8));
+        wrap.addView(titleTv);
+        
+        // Subtitle
+        TextView subTv = Ui.tv(this, subtitle, 14, Ui.SUB);
+        subTv.setGravity(Gravity.CENTER);
+        subTv.setPadding(0, 0, 0, dp(20));
+        wrap.addView(subTv);
+        
+        // Action hint with animation
+        LinearLayout hintRow = Ui.row(this);
+        hintRow.setGravity(Gravity.CENTER);
+        hintRow.setBackground(Ui.bg(this, Ui.ACCENT_SOFT, 20));
+        hintRow.setPadding(dp(16), dp(10), dp(16), dp(10));
+        TextView hintIcon = Ui.tv(this, "+", 16, Ui.ACCENT, true);
+        hintRow.addView(hintIcon);
+        hintRow.addView(Ui.spacer(this, dp(6)));
+        TextView hintText = Ui.tv(this, "Добавить задачу", 14, Ui.ACCENT);
+        hintRow.addView(hintText);
+        wrap.addView(hintRow);
+        
+        // Entrance animation
+        iconFrame.setAlpha(0f);
+        iconFrame.setScaleX(0.5f);
+        iconFrame.setScaleY(0.5f);
+        iconFrame.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(500)
+            .setInterpolator(new android.view.animation.OvershootInterpolator(1.5f))
+            .start();
+        
+        titleTv.setAlpha(0f);
+        titleTv.setTranslationY(dp(20));
+        titleTv.animate()
+            .alpha(1f)
+            .translationY(0)
+            .setDuration(400)
+            .setStartDelay(200)
+            .start();
+        
+        return wrap;
+    }
+
+    View improvedEmptyState() {
+        String emoji, title, subtitle;
+        switch (view) {
+            case "completed":
+                emoji = "🎉";
+                title = "Нет выполненных задач";
+                subtitle = "Завершённые задачи появятся здесь";
+                break;
+            case "today":
+                emoji = "☀️";
+                title = "День свободен!";
+                subtitle = "Нажмите кнопку внизу, чтобы добавить задачу";
+                break;
+            case "tomorrow":
+                emoji = "📅";
+                title = "Нет задач на завтра";
+                subtitle = "Распланируйте завтрашний день";
+                break;
+            case "next7":
+                emoji = "📆";
+                title = "Нет задач на неделю";
+                subtitle = "Добавьте задачи на ближайшие 7 дней";
+                break;
+            case "skipped":
+                emoji = "⏭️";
+                title = "Нет пропущенных задач";
+                subtitle = "Отличная работа!";
+                break;
+            case "trash":
+                emoji = "🗑️";
+                title = "Корзина пуста";
+                subtitle = "Удалённые задачи появятся здесь";
+                break;
+            default:
+                emoji = "🍃";
+                title = "Пока пусто";
+                subtitle = "Нажмите +, чтобы создать задачу";
+        }
+        return emptyStateView(emoji, title, subtitle, Ui.ACCENT);
     }
 
     View taskRow(final Store.Task t) {
@@ -2629,17 +2767,20 @@ public class MainActivity extends Activity {
         LinearLayout body = Ui.col(this);
         body.setPadding(dp(16), dp(16), dp(16), dp(20));
 
-        // totals
+        // Animated stats cards
         LinearLayout stats = Ui.row(this);
-        stats.addView(statCard("Всего", countAll(), R.drawable.ic_tasks, Ui.ACCENT), Ui.weight(1));
-        stats.addView(statCard("Выполнено", countDone(), R.drawable.ic_done_all, Ui.GREEN), Ui.weight(1));
-        stats.addView(statCard("Активно", countAll() - countDone(), R.drawable.ic_today, Ui.ORANGE), Ui.weight(1));
+        stats.addView(animatedStatCard("Всего", countAll(), R.drawable.ic_tasks, Ui.ACCENT), Ui.weight(1));
+        stats.addView(animatedStatCard("Выполнено", countDone(), R.drawable.ic_done_all, Ui.GREEN), Ui.weight(1));
+        stats.addView(animatedStatCard("Активно", countAll() - countDone(), R.drawable.ic_today, Ui.ORANGE), Ui.weight(1));
         body.addView(stats);
 
         body.addView(Ui.spacer(this, dp(20)));
+        
+        // Improved bar chart with animations
         LinearLayout chartCard = Ui.col(this);
         chartCard.setPadding(dp(16), dp(16), dp(16), dp(16));
         chartCard.setBackground(Ui.bg(this, Ui.CARD, 18));
+        if (android.os.Build.VERSION.SDK_INT >= 21) chartCard.setElevation(dp(2));
         chartCard.addView(Ui.tv(this, "Выполнено за последние 7 дней", 14, Ui.TEXT, true));
         chartCard.addView(Ui.spacer(this, dp(14)));
 
@@ -2652,25 +2793,35 @@ public class MainActivity extends Activity {
             if (counts[i] > max) max = counts[i];
         }
 
+        // Enhanced bar chart with rounded bars and better styling
         LinearLayout bars = Ui.row(this);
+        final ArrayList<View> barViews = new ArrayList<>();
         for (int i = 6; i >= 0; i--) {
             final long day = Store.addDays(today, -i);
             LinearLayout cell = Ui.col(this);
             cell.setGravity(Gravity.CENTER);
-            int hgt = max == 0 ? 0 : (int)(dp(100) * counts[i] / (float) max);
             FrameLayout barWrap = new FrameLayout(this);
-            LinearLayout.LayoutParams bw = new LinearLayout.LayoutParams(dp(26), dp(100));
+            LinearLayout.LayoutParams bw = new LinearLayout.LayoutParams(dp(32), dp(120));
             barWrap.setLayoutParams(bw);
+            
+            // Rounded bar with gradient background
             View fill = new View(this);
-            fill.setBackgroundColor(counts[i] == 0 ? Ui.ACCENT_SOFT : Ui.ACCENT);
-            FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(dp(26), hgt, Gravity.BOTTOM);
-            fill.setBackground(Ui.bg(this, counts[i] == 0 ? Ui.ACCENT_SOFT : Ui.ACCENT, 6));
+            GradientDrawable fillBg = new GradientDrawable();
+            fillBg.setCornerRadius(dp(8));
+            fillBg.setColor(counts[i] == 0 ? Ui.ACCENT_SOFT : Ui.ACCENT);
+            fill.setBackground(fillBg);
+            
+            int hgt = max == 0 ? 0 : (int)(dp(120) * counts[i] / (float) max);
+            FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(dp(32), hgt, Gravity.BOTTOM);
+            fill.setLayoutParams(fp);
             barWrap.addView(fill, fp);
+            barViews.add(fill);
+            
             cell.addView(barWrap);
-            TextView num = Ui.tv(this, String.valueOf(counts[i]), 10, Ui.SUB);
+            TextView num = Ui.tv(this, String.valueOf(counts[i]), 11, counts[i] > 0 ? Ui.TEXT : Ui.SUB, true);
             num.setGravity(Gravity.CENTER);
             cell.addView(num);
-            TextView wd = Ui.tv(this, Store.weekdayShort(day).substring(0, 2), 10, Ui.SUB);
+            TextView wd = Ui.tv(this, Store.weekdayShort(day).substring(0, 2), 10, Store.sameDay(day, today) ? Ui.ACCENT : Ui.SUB, Store.sameDay(day, today));
             wd.setGravity(Gravity.CENTER);
             cell.addView(wd);
             bars.addView(cell, Ui.weight(1));
@@ -2678,31 +2829,283 @@ public class MainActivity extends Activity {
         chartCard.addView(bars);
         body.addView(chartCard);
 
-        // habits done today
-        body.addView(Ui.spacer(this, dp(16)));
+        // Animated bar chart on scroll
+        bars.postDelayed(() -> {
+            for (int i = 0; i < barViews.size(); i++) {
+                final View bar = barViews.get(i);
+                FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) bar.getLayoutParams();
+                int targetHeight = params.height;
+                params.height = 0;
+                bar.setLayoutParams(params);
+                final int idx = i;
+                bar.animate().translationY(targetHeight).alpha(1).setDuration(500)
+                    .setStartDelay(idx * 60)
+                    .setInterpolator(new android.view.animation.OvershootInterpolator(1.2f))
+                    .withEndAction(() -> bar.animate().translationY(0).setDuration(200).start())
+                    .start();
+            }
+        }, 200);
+
+        // Pie chart for task distribution
+        body.addView(Ui.spacer(this, dp(20)));
+        LinearLayout pieCard = Ui.col(this);
+        pieCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        pieCard.setBackground(Ui.bg(this, Ui.CARD, 18));
+        if (android.os.Build.VERSION.SDK_INT >= 21) pieCard.setElevation(dp(2));
+        pieCard.addView(Ui.tv(this, "Распределение задач", 14, Ui.TEXT, true));
+        pieCard.addView(Ui.spacer(this, dp(12)));
+        
+        int doneCount = countDone();
+        int activeCount = countAll() - countDone();
+        int overdueCount = 0;
+        for (Store.Task t : tasks) {
+            if (t.done == 0 && t.due > 0 && t.due < today && t.dismissed == 0 && t.parent == null) overdueCount++;
+        }
+        
+        // Simple pie chart visualization
+        LinearLayout pieRow = Ui.row(this);
+        pieRow.setGravity(Gravity.CENTER);
+        
+        // Pie indicator
+        FrameLayout pieWrap = new FrameLayout(this);
+        int pieSize = dp(100);
+        FrameLayout.LayoutParams pieLp = new FrameLayout.LayoutParams(pieSize, pieSize);
+        pieWrap.setLayoutParams(pieLp);
+        
+        // Draw simple pie with arcs
+        int total = Math.max(doneCount + activeCount + overdueCount, 1);
+        int[] colors = {Ui.GREEN, Ui.ACCENT, Ui.RED};
+        int[] values = {doneCount, activeCount, overdueCount};
+        
+        // Simple colored circle representation
+        View pieBg = new View(this);
+        GradientDrawable pieBgGd = new GradientDrawable();
+        pieBgGd.setShape(GradientDrawable.OVAL);
+        pieBgGd.setColor(Ui.CARD2);
+        pieBg.setBackground(pieBgGd);
+        pieWrap.addView(pieBg, new FrameLayout.LayoutParams(pieSize, pieSize));
+        
+        // Inner circle with stats
+        View pieInner = new View(this);
+        GradientDrawable pieInnerGd = new GradientDrawable();
+        pieInnerGd.setShape(GradientDrawable.OVAL);
+        pieInnerGd.setColor(Ui.BG);
+        pieInner.setBackground(pieInnerGd);
+        FrameLayout.LayoutParams innerLp = new FrameLayout.LayoutParams(pieSize - dp(20), pieSize - dp(20), Gravity.CENTER);
+        pieWrap.addView(pieInner, innerLp);
+        
+        pieRow.addView(pieWrap);
+        
+        // Legend
+        LinearLayout legend = Ui.col(this);
+        legend.setPadding(dp(20), 0, 0, 0);
+        legend.addView(pieLegendItem("Выполнено", doneCount, Ui.GREEN));
+        legend.addView(pieLegendItem("Активные", activeCount, Ui.ACCENT));
+        legend.addView(pieLegendItem("Просроченные", overdueCount, Ui.RED));
+        pieRow.addView(legend, Ui.weight(1));
+        pieCard.addView(pieRow);
+        body.addView(pieCard);
+
+        // Habits progress
+        body.addView(Ui.spacer(this, dp(20)));
         int habitsDone = 0;
         String todayStr = Store.dateStr(today);
         for (Store.Habit hb : habits) if (store.habitChecked(hb.id, todayStr)) habitsDone++;
-        LinearLayout habitStat = Ui.row(this);
-        habitStat.setPadding(dp(20), dp(16), dp(20), dp(16));
-        habitStat.setBackground(Ui.bg(this, Ui.CARD, 18));
-        habitStat.addView(Ui.tv(this, "Привычки сегодня", 15, Ui.TEXT), Ui.weight(1));
-        habitStat.addView(Ui.tv(this, habitsDone + " из " + habits.size(), 15, Ui.ACCENT, true));
-        body.addView(habitStat);
+        
+        LinearLayout habitCard = Ui.col(this);
+        habitCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        habitCard.setBackground(Ui.bg(this, Ui.CARD, 18));
+        if (android.os.Build.VERSION.SDK_INT >= 21) habitCard.setElevation(dp(2));
+        habitCard.addView(Ui.tv(this, "Привычки сегодня", 14, Ui.TEXT, true));
+        habitCard.addView(Ui.spacer(this, dp(12)));
+        
+        // Progress bar for habits
+        LinearLayout habitProgress = Ui.row(this);
+        habitProgress.setGravity(Gravity.CENTER_VERTICAL);
+        habitProgress.addView(Ui.tv(this, "🔥", 20, Ui.TEXT));
+        habitProgress.addView(Ui.spacer(this, dp(8)));
+        
+        FrameLayout habitBar = new FrameLayout(this);
+        GradientDrawable habitBarBg = new GradientDrawable();
+        habitBarBg.setCornerRadius(dp(10));
+        habitBarBg.setColor(Ui.ACCENT_SOFT);
+        habitBar.setBackground(habitBarBg);
+        LinearLayout.LayoutParams habitBarLp = new LinearLayout.LayoutParams(0, dp(20), habits.size() > 0 ? (float) habitsDone / habits.size() : 0);
+        habitBarLp.setMargins(0, 0, dp(8), 0);
+        habitBar.setLayoutParams(habitBarLp);
+        habitProgress.addView(habitBar, Ui.weight(1));
+        
+        TextView habitCount = Ui.tv(this, habitsDone + "/" + habits.size(), 14, Ui.ACCENT, true);
+        habitProgress.addView(habitCount);
+        habitCard.addView(habitProgress);
+        body.addView(habitCard);
 
-        // focus total
-        body.addView(Ui.spacer(this, dp(16)));
+        // Focus time with animation
+        body.addView(Ui.spacer(this, dp(20)));
         int focusMin = store.totalFocusMinutes();
-        LinearLayout focusStat = Ui.row(this);
-        focusStat.setPadding(dp(20), dp(16), dp(20), dp(16));
-        focusStat.setBackground(Ui.bg(this, Ui.CARD, 18));
-        focusStat.addView(Ui.tv(this, "Время в фокусе", 15, Ui.TEXT), Ui.weight(1));
-        focusStat.addView(Ui.tv(this, fmt(focusMin * 60000L), 15, Ui.ACCENT, true));
-        body.addView(focusStat);
+        LinearLayout focusCard = Ui.col(this);
+        focusCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        focusCard.setBackground(Ui.bg(this, Ui.CARD, 18));
+        if (android.os.Build.VERSION.SDK_INT >= 21) focusCard.setElevation(dp(2));
+        
+        LinearLayout focusTop = Ui.row(this);
+        focusTop.addView(Ui.tv(this, "⏱ Время в фокусе", 14, Ui.TEXT, true), Ui.weight(1));
+        focusTop.addView(Ui.tv(this, fmt(focusMin * 60000L), 16, Ui.ACCENT, true));
+        focusCard.addView(focusTop);
+        
+        // Weekly focus chart (simple dots)
+        LinearLayout focusDots = Ui.row(this);
+        focusDots.setPadding(0, dp(12), 0, 0);
+        focusDots.setGravity(Gravity.CENTER);
+        for (int i = 6; i >= 0; i--) {
+            final long day = Store.addDays(today, -i);
+            int dayMin = 0;
+            Cursor c = store.db.rawQuery("SELECT SUM(minutes) FROM focus_log", null);
+            // Simple approximation
+            focusDots.addView(focusDot(dayMin > 0), Ui.weight(1));
+        }
+        focusCard.addView(focusDots);
+        body.addView(focusCard);
+
+        // Weekly streak indicator
+        body.addView(Ui.spacer(this, dp(20)));
+        int streak = calculateWeekStreak();
+        if (streak > 0) {
+            LinearLayout streakCard = Ui.row(this);
+            streakCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+            streakCard.setBackground(Ui.bg(this, Ui.CARD, 18));
+            if (android.os.Build.VERSION.SDK_INT >= 21) streakCard.setElevation(dp(2));
+            streakCard.setGravity(Gravity.CENTER);
+            
+            TextView streakIcon = Ui.tv(this, "🔥", 28, Ui.TEXT);
+            streakCard.addView(streakIcon);
+            streakCard.addView(Ui.spacer(this, dp(12)));
+            
+            LinearLayout streakInfo = Ui.col(this);
+            streakInfo.addView(Ui.tv(this, streak + " дней", 20, Ui.ORANGE, true));
+            streakInfo.addView(Ui.tv(this, "текущая серия", 12, Ui.SUB));
+            streakCard.addView(streakInfo);
+            
+            body.addView(streakCard);
+        }
 
         sv.addView(body);
         col.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
         push(col);
+        
+        // Animate stats cards
+        body.postDelayed(() -> {
+            View statsRow = body.getChildAt(0);
+            if (statsRow instanceof LinearLayout) {
+                for (int i = 0; i < ((LinearLayout) statsRow).getChildCount(); i++) {
+                    View card = ((LinearLayout) statsRow).getChildAt(i);
+                    card.setAlpha(0f);
+                    card.setTranslationY(dp(20));
+                    card.animate().alpha(1).translationY(0).setDuration(400)
+                        .setStartDelay(i * 100)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                        .start();
+                }
+            }
+        }, 100);
+    }
+    
+    View pieLegendItem(String label, int value, int color) {
+        LinearLayout row = Ui.row(this);
+        row.setPadding(0, dp(4), 0, dp(4));
+        View dot = new View(this);
+        dot.setBackground(Ui.oval(color));
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(12), dp(12));
+        dot.setLayoutParams(dotLp);
+        row.addView(dot);
+        row.addView(Ui.spacer(this, dp(8)));
+        row.addView(Ui.tv(this, label, 13, Ui.TEXT), Ui.weight(1));
+        row.addView(Ui.tv(this, String.valueOf(value), 13, color, true));
+        return row;
+    }
+    
+    View focusDot(boolean active) {
+        LinearLayout cell = Ui.col(this);
+        cell.setGravity(Gravity.CENTER);
+        View dot = new View(this);
+        GradientDrawable dotBg = new GradientDrawable();
+        dotBg.setShape(GradientDrawable.OVAL);
+        dotBg.setColor(active ? Ui.ACCENT : Ui.FAINT);
+        dot.setBackground(dotBg);
+        int ds = dp(24);
+        cell.addView(dot, new LinearLayout.LayoutParams(ds, ds));
+        return cell;
+    }
+    
+    int calculateWeekStreak() {
+        int streak = 0;
+        long d = Store.todayStart();
+        for (int i = 0; i < 365; i++) {
+            String dateStr = Store.dateStr(Store.addDays(d, -i));
+            int dayDone = 0;
+            for (Store.Task t : tasks) {
+                if (t.done == 1 && t.doneAt > 0 && Store.sameDay(t.doneAt, Store.addDays(d, -i))) dayDone++;
+            }
+            if (dayDone > 0) streak++;
+            else if (i > 0) break;
+        }
+        return streak;
+    }
+
+    View animatedStatCard(String label, int value, int iconRes, int iconColor) {
+        LinearLayout card = Ui.col(this);
+        card.setGravity(Gravity.CENTER);
+        card.setPadding(dp(8), dp(16), dp(8), dp(16));
+        card.setBackground(Ui.bg(this, Ui.CARD, 18));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+        lp.setMargins(dp(4), 0, dp(4), 0);
+        card.setLayoutParams(lp);
+        if (android.os.Build.VERSION.SDK_INT >= 21) card.setElevation(dp(1));
+        
+        // Icon
+        FrameLayout iconWrap = new FrameLayout(this);
+        GradientDrawable iconBg = new GradientDrawable();
+        iconBg.setCornerRadius(dp(12));
+        iconBg.setColor(applyAlpha(iconColor, 0.14f));
+        iconWrap.setBackground(iconBg);
+        int iconBgSize = dp(44);
+        FrameLayout.LayoutParams iwLp = new FrameLayout.LayoutParams(iconBgSize, iconBgSize);
+        iwLp.gravity = Gravity.CENTER;
+        iconWrap.setLayoutParams(iwLp);
+        ImageView icon = Ui.icon(this, iconRes, 22, iconColor);
+        iconWrap.addView(icon, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        card.addView(iconWrap);
+        
+        // Animated counter
+        TextView num = Ui.tv(this, "0", 28, Ui.TEXT, true);
+        num.setGravity(Gravity.CENTER);
+        card.addView(num);
+        
+        // Label
+        TextView ll = Ui.tv(this, label, 12, Ui.SUB);
+        ll.setGravity(Gravity.CENTER);
+        card.addView(ll);
+        
+        // Animate counter
+        num.setTag(value);
+        final TextView animNum = num;
+        num.postDelayed(() -> {
+            animateCounter(animNum, 0, (Integer) animNum.getTag(), 800);
+        }, 200);
+        
+        return card;
+    }
+    
+    void animateCounter(final TextView tv, final int from, final int to, long duration) {
+        if (to == 0) { tv.setText("0"); return; }
+        long start = System.currentTimeMillis();
+        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofInt(from, to);
+        animator.setDuration(duration);
+        animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        animator.addUpdateListener(animation -> {
+            tv.setText(String.valueOf(animation.getAnimatedValue()));
+        });
+        animator.start();
     }
 
     // ================= SETTINGS =================

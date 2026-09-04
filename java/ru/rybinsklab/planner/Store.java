@@ -74,15 +74,32 @@ public class Store {
 
     final Context ctx;
     final SQLiteDatabase db;
+    
+    // Lightweight caching for faster app startup
+    private ArrayList<Task> cachedTasks = null;
+    private ArrayList<TList> cachedLists = null;
+    private ArrayList<Tag> cachedTags = null;
+    private ArrayList<Habit> cachedHabits = null;
+    private long lastCacheTime = 0;
+    private static final long CACHE_VALIDITY_MS = 5000; // 5 seconds
 
     Store(Context c) {
         ctx = c.getApplicationContext();
         db = new DB(ctx).getWritableDatabase();
         purgeTrash();
     }
+    
+    // Invalidate cache when data changes
+    void invalidateCache() {
+        cachedTasks = null;
+        cachedLists = null;
+        cachedTags = null;
+        cachedHabits = null;
+        lastCacheTime = 0;
+    }
 
     static class DB extends SQLiteOpenHelper {
-        DB(Context c) { super(c, "planner.db", null, 6); }
+        DB(Context c) { super(c, "planner.db", null, 7); }
         public void onCreate(SQLiteDatabase d) {
             d.execSQL("CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, notes TEXT, time TEXT, repeat TEXT, list_id INTEGER, due INTEGER, reminder INTEGER, created INTEGER, done_at INTEGER, has_time INTEGER, priority INTEGER, done INTEGER, parent INTEGER, sort INTEGER, pinned INTEGER DEFAULT 0, dismissed INTEGER DEFAULT 0, tags TEXT DEFAULT '', reminders TEXT DEFAULT '', deleted INTEGER DEFAULT 0, deleted_at INTEGER DEFAULT 0)");
             d.execSQL("CREATE TABLE lists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color INTEGER, sort INTEGER)");
@@ -116,8 +133,13 @@ public class Store {
         }
     }
 
-    // ---------- tasks ----------
+    // ---------- tasks with caching ----------
     ArrayList<Task> loadTasks() {
+        // Return cached data if still valid (for rapid successive calls)
+        if (cachedTasks != null && (System.currentTimeMillis() - lastCacheTime) < CACHE_VALIDITY_MS) {
+            return cachedTasks;
+        }
+        
         ArrayList<Task> all = new ArrayList<>();
         Cursor c = db.rawQuery("SELECT * FROM tasks ORDER BY sort, id", null);
         while (c.moveToNext()) {
@@ -147,6 +169,10 @@ public class Store {
             if (t.parent != null) t.parent.subs.add(t); else all.add(t);
         }
         c.close();
+        
+        // Cache the result
+        cachedTasks = all;
+        lastCacheTime = System.currentTimeMillis();
         return all;
     }
 
@@ -193,6 +219,7 @@ public class Store {
         v.put("tags", csvLong(t.tagIds));
         v.put("reminders", csvInt(t.remOffsets));
         v.put("parent", t.parent != null ? t.parent.id : 0);
+        invalidateCache(); // Invalidate cache on data change
         if (t.id == 0) { t.id = db.insert("tasks", null, v); }
         else { db.update("tasks", v, "id=?", new String[]{String.valueOf(t.id)}); }
     }
@@ -223,6 +250,7 @@ public class Store {
 
     void emptyTrash() {
         db.delete("tasks", "deleted=1", null);
+        invalidateCache();
     }
 
     void setDone(Task t, boolean done) {
@@ -232,8 +260,9 @@ public class Store {
         if (done) Reminders.cancel(ctx, t.id); else if (t.reminder > 0 && t.reminder > System.currentTimeMillis()) Reminders.schedule(ctx, t);
     }
 
-    // ---------- lists ----------
+    // ---------- lists with caching ----------
     ArrayList<TList> loadLists() {
+        if (cachedLists != null) return cachedLists;
         ArrayList<TList> l = new ArrayList<>();
         Cursor c = db.rawQuery("SELECT * FROM lists ORDER BY sort, id", null);
         while (c.moveToNext()) {
@@ -244,6 +273,7 @@ public class Store {
             l.add(x);
         }
         c.close();
+        cachedLists = l;
         return l;
     }
 
@@ -254,6 +284,7 @@ public class Store {
         v.put("sort", l.id);
         if (l.id == 0) l.id = db.insert("lists", null, v);
         else db.update("lists", v, "id=?", new String[]{String.valueOf(l.id)});
+        cachedLists = null; // Invalidate list cache
     }
 
     void deleteList(long id) {
@@ -261,10 +292,13 @@ public class Store {
         ContentValues v = new ContentValues();
         v.put("list_id", 0);
         db.update("tasks", v, "list_id=?", new String[]{String.valueOf(id)});
+        cachedLists = null;
+        invalidateCache();
     }
 
-    // ---------- tags ----------
+    // ---------- tags with caching ----------
     ArrayList<Tag> loadTags() {
+        if (cachedTags != null) return cachedTags;
         ArrayList<Tag> l = new ArrayList<>();
         Cursor c = db.rawQuery("SELECT * FROM tags ORDER BY sort, id", null);
         while (c.moveToNext()) {
@@ -275,6 +309,7 @@ public class Store {
             l.add(t);
         }
         c.close();
+        cachedTags = l;
         return l;
     }
 
@@ -285,6 +320,7 @@ public class Store {
         v.put("sort", t.id);
         if (t.id == 0) t.id = db.insert("tags", null, v);
         else db.update("tags", v, "id=?", new String[]{String.valueOf(t.id)});
+        cachedTags = null;
     }
 
     void deleteTag(long id) {
@@ -390,8 +426,9 @@ public class Store {
         db.delete("wishes", "id=?", new String[]{String.valueOf(id)});
     }
 
-    // ---------- habits ----------
+    // ---------- habits with caching ----------
     ArrayList<Habit> loadHabits() {
+        if (cachedHabits != null) return cachedHabits;
         ArrayList<Habit> l = new ArrayList<>();
         Cursor c = db.rawQuery("SELECT * FROM habits ORDER BY sort, id", null);
         while (c.moveToNext()) {
@@ -404,6 +441,7 @@ public class Store {
             l.add(h);
         }
         c.close();
+        cachedHabits = l;
         return l;
     }
 
@@ -416,11 +454,13 @@ public class Store {
         v.put("sort", h.id);
         if (h.id == 0) h.id = db.insert("habits", null, v);
         else db.update("habits", v, "id=?", new String[]{String.valueOf(h.id)});
+        cachedHabits = null;
     }
 
     void deleteHabit(long id) {
         db.delete("habits", "id=?", new String[]{String.valueOf(id)});
         db.delete("habit_log", "habit_id=?", new String[]{String.valueOf(id)});
+        cachedHabits = null;
     }
 
     boolean habitChecked(long habitId, String date) {
