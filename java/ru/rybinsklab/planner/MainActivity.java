@@ -146,6 +146,7 @@ public class MainActivity extends Activity {
         LinearLayout x = Ui.col(this);
         x.setGravity(Gravity.CENTER);
         x.setPadding(dp(4), dp(4), dp(4), dp(4));
+        x.setClickable(true);
         // Pill-индикатор под активной вкладкой (Material 3 NavigationBar style)
         GradientDrawable indicator = new GradientDrawable();
         indicator.setCornerRadius(dp(100));
@@ -159,6 +160,13 @@ public class MainActivity extends Activity {
         x.addView(l);
         x.setTag(new Object[]{i, l, indicator, resId});
         x.setOnClickListener(v -> {
+            // Мини-анимация нажатия: pop-эффект иконки (Material 3 «spring»).
+            i.animate().scaleX(0.78f).scaleY(0.78f).setDuration(70)
+                .withEndAction(() -> i.animate().scaleX(1f).scaleY(1f)
+                    .setDuration(180)
+                    .setInterpolator(new android.view.animation.OvershootInterpolator(2.4f))
+                    .start())
+                .start();
             tab = id;
             closeDrawer();
             showTab(id);
@@ -186,8 +194,10 @@ public class MainActivity extends Activity {
     void updateNav() {
         for (int i = 0; i < nav.getChildCount(); i++) {
             View v = nav.getChildAt(i);
-            if (v.getTag() instanceof View[]) {
-                Object[] p = (Object[]) v.getTag();
+            Object tag = v.getTag();
+            // Тег — это Object[]: [ImageView icon, TextView label, GradientDrawable indicator, int resId]
+            if (tag instanceof Object[]) {
+                Object[] p = (Object[]) tag;
                 int c = i == tab ? Ui.ACCENT : Ui.FAINT;
                 ((ImageView) p[0]).setColorFilter(c, PorterDuff.Mode.SRC_IN);
                 ((TextView) p[1]).setTextColor(c);
@@ -1016,7 +1026,13 @@ public class MainActivity extends Activity {
 
     String metaText(Store.Task t) {
         StringBuilder s = new StringBuilder();
-        if (t.due > 0) {
+        if (t.done == 1 && t.doneAt > 0) {
+            // Show completion date instead of due date when task is done
+            long today = Store.todayStart();
+            if (Store.sameDay(t.doneAt, today)) s.append("✓ Выполнено сегодня");
+            else if (Store.sameDay(t.doneAt, Store.addDays(today, -1))) s.append("✓ Выполнено вчера");
+            else s.append("✓ ").append(Store.shortDate(t.doneAt));
+        } else if (t.due > 0) {
             long today = Store.todayStart();
             if (Store.sameDay(t.due, today)) s.append("Сегодня");
             else if (Store.sameDay(t.due, Store.addDays(today, 1))) s.append("Завтра");
@@ -1090,6 +1106,9 @@ public class MainActivity extends Activity {
             if (s.done != 1) { toast("Сначала выполните подзадачи"); return; }
         }
         store.setDone(t, true);
+        // Update task in local list directly to avoid full reload
+        t.done = 1;
+        t.doneAt = System.currentTimeMillis();
         if (t.repeat.length() > 0 && t.due > 0) {
             // create next occurrence
             Store.Task next = new Store.Task();
@@ -1102,9 +1121,17 @@ public class MainActivity extends Activity {
             next.done = 0;
             // save next with subs
             Store.Task savedNext = storeSaveWithSubs(next);
+            // Add next task to local list
+            tasks.add(savedNext);
         }
-        reload();
-        rebuildTasks();
+        // Partial UI update instead of full reload - just rebuild current view
+        if (tab == 0 && stack.isEmpty()) {
+            // Only refresh task list, don't reload everything from DB
+            tasksScreen();
+        } else if (tab == 1) {
+            // Refresh calendar view
+            calendarScreen();
+        }
         toast("Выполнено");
         maybeSync();
     }
@@ -1797,14 +1824,41 @@ public class MainActivity extends Activity {
         TextView num = Ui.tv(this, Store.shortDate(day), 13, Ui.SUB);
         num.setPadding(dp(8), 0, 0, 0);
         head.addView(num, Ui.weight(1));
+        
+        // Show count of completed/total tasks for the day
+        int dueCount = 0, doneCount = 0, completedOnDay = 0;
+        for (Store.Task t : tasks) {
+            if (t.parent != null || t.deleted == 1) continue;
+            if (t.due > 0 && Store.sameDay(t.due, day)) { 
+                dueCount++; 
+                if (t.done == 1) doneCount++;
+            }
+            if (t.done == 1 && t.doneAt > 0 && Store.sameDay(t.doneAt, day)) {
+                completedOnDay++;
+            }
+        }
+        if (dueCount > 0 || completedOnDay > 0) {
+            String countText = doneCount + "/" + dueCount + " выполнено";
+            if (completedOnDay > 0 && completedOnDay > doneCount) {
+                countText += " (+" + (completedOnDay - doneCount) + " завершено)";
+            }
+            TextView count = Ui.tv(this, countText, 11, 0xFF43A047);
+            head.addView(count);
+        }
+        
         card.addView(head);
 
         boolean any = false;
         for (Store.Task t : tasks) {
             if (t.parent != null || t.deleted == 1) continue;
-            if (t.due > 0 && Store.sameDay(t.due, day)) { card.addView(taskRow(t)); any = true; }
+            // Show tasks due on this day OR completed on this day
+            if ((t.due > 0 && Store.sameDay(t.due, day)) || 
+                (t.done == 1 && t.doneAt > 0 && Store.sameDay(t.doneAt, day))) { 
+                card.addView(taskRow(t)); 
+                any = true; 
+            }
         }
-        if (!any) card.addView(Ui.tv(this, "Задач нет", 13, Ui.FAINT));
+        if (!any) card.addView(Ui.tv(this, "Нет задач", 13, Ui.FAINT));
         return card;
     }
 
@@ -1865,13 +1919,54 @@ public class MainActivity extends Activity {
         if (sel) num.setBackground(Ui.oval(Ui.ACCENT));
         else if (isToday) num.setBackground(Ui.oval(Ui.ACCENT_SOFT));
         cell.addView(num);
-        // dot indicator
-        boolean hasTask = false, allDone = true;
-        for (Store.Task t : tasks) if (t.due > 0 && Store.sameDay(t.due, millis)) { hasTask = true; if (t.done == 0) allDone = false; }
+        
+        // Check for tasks due on this day AND tasks completed on this day
+        boolean hasDueTask = false, allDueDone = true;
+        boolean hasCompletedTask = false;
+        long today = Store.todayStart();
+        boolean isFuture = millis > today;
+        for (Store.Task t : tasks) {
+            if (t.parent != null || t.deleted == 1) continue;
+            // Check if task is due on this day
+            if (t.due > 0 && Store.sameDay(t.due, millis)) { 
+                hasDueTask = true; 
+                if (t.done == 0) allDueDone = false;
+            }
+            // Check if task was completed on this day
+            if (t.done == 1 && t.doneAt > 0 && Store.sameDay(t.doneAt, millis)) {
+                hasCompletedTask = true;
+            }
+        }
+        
+        // Dot indicator with enhanced visual for future tasks
         View dot = new View(this);
-        int ds = dp(4);
+        int ds = dp(5); // Slightly larger for better visibility
         dot.setLayoutParams(new LinearLayout.LayoutParams(ds, ds));
-        dot.setBackground(Ui.oval(hasTask ? (allDone ? Ui.FAINT : Ui.ACCENT) : Color.TRANSPARENT));
+        
+        if (hasCompletedTask) {
+            // Green filled dot for days with completed tasks
+            dot.setBackground(Ui.oval(0xFF43A047)); // Green
+        } else if (hasDueTask) {
+            if (allDueDone) {
+                // Gray dot when all tasks are done
+                dot.setBackground(Ui.oval(Ui.FAINT));
+            } else if (isFuture) {
+                // Blue outlined dot for future pending tasks (planned ahead)
+                GradientDrawable gd = new GradientDrawable();
+                gd.setShape(GradientDrawable.OVAL);
+                gd.setStroke(dp(2), Ui.BLUE); // Blue outline for future
+                gd.setColor(Color.TRANSPARENT);
+                dot.setBackground(gd);
+            } else if (millis < today) {
+                // Red dot for overdue tasks
+                dot.setBackground(Ui.oval(Ui.RED));
+            } else {
+                // Accent filled dot for current day pending tasks
+                dot.setBackground(Ui.oval(Ui.ACCENT));
+            }
+        } else {
+            dot.setBackground(Ui.oval(Color.TRANSPARENT));
+        }
         cell.addView(dot);
         cell.setOnClickListener(v -> { calSel = Calendar.getInstance(); calSel.setTimeInMillis(millis); calendarScreen(); });
         return cell;
@@ -1886,7 +1981,9 @@ public class MainActivity extends Activity {
         boolean any = false;
         for (Store.Task t : tasks) {
             if (t.parent != null) continue;
-            if (t.due > 0 && Store.sameDay(t.due, calSel.getTimeInMillis())) {
+            // Show tasks due on selected day OR completed on selected day
+            if ((t.due > 0 && Store.sameDay(t.due, calSel.getTimeInMillis())) || 
+                (t.done == 1 && t.doneAt > 0 && Store.sameDay(t.doneAt, calSel.getTimeInMillis()))) {
                 col.addView(taskRow(t));
                 any = true;
             }
